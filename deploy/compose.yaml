@@ -60,7 +60,23 @@ services:
       <<: *python-health
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7720/healthz', timeout=2)"]
 
+  # Optional indexer manager. Enable with `marquee setup -with-indexers`
+  # (or COMPOSE_PROFILES=indexers). Marquee ships no indexer configuration.
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    profiles: ["indexers"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9696:9696"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - marquee-prowlarr:/config
+
 volumes:
   marquee-data:
   marquee-cache:
   marquee-recs:
+  marquee-prowlarr:

@@ -1,4 +1,4 @@
-package launcher
+package launcher_test
 
 import (
 	"bytes"
@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"marquee/internal/launcher"
 )
 
 func TestFailed(t *testing.T) {
-	if Failed([]Result{{Status: OK}, {Status: Warn}}) {
+	if launcher.Failed([]launcher.Result{{Status: launcher.OK}, {Status: launcher.Warn}}) {
 		t.Fatal("warnings must not count as failures")
 	}
-	if !Failed([]Result{{Status: OK}, {Status: Fail}}) {
+	if !launcher.Failed([]launcher.Result{{Status: launcher.OK}, {Status: launcher.Fail}}) {
 		t.Fatal("expected failure")
 	}
 }
@@ -28,17 +30,17 @@ func TestCheckCore(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if r := checkCore(context.Background(), srv.URL); r.Status != OK {
+	if r := launcher.CheckCore(context.Background(), srv.URL); r.Status != launcher.OK {
 		t.Fatalf("status = %s, detail = %s", r.Status, r.Detail)
 	}
-	if r := checkCore(context.Background(), "http://127.0.0.1:1"); r.Status != Warn {
+	if r := launcher.CheckCore(context.Background(), "http://127.0.0.1:1"); r.Status != launcher.Warn {
 		t.Fatalf("unreachable core should warn, got %s", r.Status)
 	}
 }
 
 func TestPrint(t *testing.T) {
 	var buf bytes.Buffer
-	Print(&buf, []Result{{Name: "docker", Status: OK, Detail: "found"}})
+	launcher.Print(&buf, []launcher.Result{{Name: "docker", Status: launcher.OK, Detail: "found"}})
 	if !strings.Contains(buf.String(), "[ok  ] docker") {
 		t.Fatalf("unexpected output: %q", buf.String())
 	}

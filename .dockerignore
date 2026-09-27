@@ -11,3 +11,4 @@ data
 **/.venv
 *.md
 !py/**/README.md
+.cache

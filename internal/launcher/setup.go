@@ -13,11 +13,12 @@ import (
 
 // SetupOptions configures a first-time or repeated setup run.
 type SetupOptions struct {
-	ComposeFile string
-	CoreURL     string
-	MediaDir    string // optional; persisted to the compose .env file
-	NoCache     bool   // rebuild images without the build cache
-	Out         io.Writer
+	ComposeFile  string
+	CoreURL      string
+	MediaDir     string // optional; persisted to the compose .env file
+	WithIndexers bool   // also run Prowlarr (compose profile "indexers"); persisted
+	NoCache      bool   // rebuild images without the build cache
+	Out          io.Writer
 }
 
 // Setup prepares the environment, builds the images, starts the stack and
@@ -25,9 +26,10 @@ type SetupOptions struct {
 func Setup(ctx context.Context, opts SetupOptions) error {
 	out := opts.Out
 	total := 4
-	if opts.MediaDir != "" {
+	if opts.MediaDir != "" || opts.WithIndexers {
 		total = 5
 	}
+	envFile := filepath.Join(filepath.Dir(opts.ComposeFile), ".env")
 	n := 0
 	step := func(msg string) {
 		n++
@@ -43,8 +45,10 @@ func Setup(ctx context.Context, opts SetupOptions) error {
 		return err
 	}
 
+	if opts.MediaDir != "" || opts.WithIndexers {
+		step("Saving configuration")
+	}
 	if opts.MediaDir != "" {
-		step("Configuring the media folder")
 		abs, err := filepath.Abs(opts.MediaDir)
 		if err != nil {
 			return err
@@ -52,11 +56,17 @@ func Setup(ctx context.Context, opts SetupOptions) error {
 		if err := os.MkdirAll(abs, 0o755); err != nil {
 			return fmt.Errorf("cannot create media folder: %w", err)
 		}
-		envFile := filepath.Join(filepath.Dir(opts.ComposeFile), ".env")
 		if err := SetEnvValue(envFile, "MARQUEE_MEDIA_DIR", filepath.ToSlash(abs)); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "Media folder: %s (saved to %s)\n", abs, envFile)
+	}
+	if opts.WithIndexers {
+		// Docker Compose reads COMPOSE_PROFILES from .env, so later up/down runs include Prowlarr too.
+		if err := SetEnvValue(envFile, "COMPOSE_PROFILES", "indexers"); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Indexer manager (Prowlarr) enabled (saved to %s)\n", envFile)
 	}
 
 	step("Building container images")
@@ -81,6 +91,9 @@ func Setup(ctx context.Context, opts SetupOptions) error {
 	}
 
 	fmt.Fprintf(out, "\nMarquee is running. Core API: %s\n", opts.CoreURL)
+	if opts.WithIndexers {
+		fmt.Fprintln(out, "Prowlarr: http://127.0.0.1:9696 (add your own indexers there)")
+	}
 	fmt.Fprintln(out, "Stop it with `marquee down`; start it again with `marquee up`.")
 	return nil
 }

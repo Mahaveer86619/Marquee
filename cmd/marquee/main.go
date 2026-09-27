@@ -57,14 +57,16 @@ func main() {
 	case "setup":
 		fs := flag.NewFlagSet("setup", flag.ExitOnError)
 		media := fs.String("media", "", "host folder for the media library (saved for later runs)")
+		withIndexers := fs.Bool("with-indexers", false, "also run Prowlarr for user-configured indexers (saved for later runs)")
 		noCache := fs.Bool("no-cache", false, "rebuild images without the build cache")
 		_ = fs.Parse(args)
 		err = launcher.Setup(ctx, launcher.SetupOptions{
-			ComposeFile: *composeFile,
-			CoreURL:     *coreURL,
-			MediaDir:    *media,
-			NoCache:     *noCache,
-			Out:         os.Stdout,
+			ComposeFile:  *composeFile,
+			CoreURL:      *coreURL,
+			MediaDir:     *media,
+			WithIndexers: *withIndexers,
+			NoCache:      *noCache,
+			Out:          os.Stdout,
 		})
 	case "up":
 		err = launcher.Compose(ctx, *composeFile, "up", "-d", "--build", "--wait")

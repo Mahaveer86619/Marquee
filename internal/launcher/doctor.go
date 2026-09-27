@@ -35,7 +35,7 @@ func Doctor(ctx context.Context, coreURL string) []Result {
 		checkCommand(ctx, "docker engine", Fail, "docker", "info", "--format", "{{.ServerVersion}}"),
 		checkCommand(ctx, "docker compose", Fail, "docker", "compose", "version", "--short"),
 		checkBinary("mpv", "mpv", false),
-		checkCore(ctx, coreURL),
+		CheckCore(ctx, coreURL),
 	}
 }
 
@@ -81,7 +81,8 @@ func checkCommand(ctx context.Context, name string, onError Status, bin string, 
 	return Result{name, OK, firstLine(detail)}
 }
 
-func checkCore(ctx context.Context, coreURL string) Result {
+// CheckCore reports whether the core service answers its health endpoint.
+func CheckCore(ctx context.Context, coreURL string) Result {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, coreURL+"/healthz", nil)

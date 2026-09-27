@@ -70,6 +70,8 @@ A more detailed description is available in [docs/architecture.md](docs/architec
 | Layer | Technology |
 |---|---|
 | Core services | Go, `net/http`, SQLite (WAL), anacrolix/torrent (planned) |
+| Metadata and sources | TMDB, TVmaze, Internet Archive, Torznab-compatible indexers (planned) |
+| Browser player | hls.js with HLS remuxing; video is copied, never re-encoded (planned) |
 | Machine learning services | Python, faster-whisper, Silero VAD, ONNX Runtime (planned) |
 | Service contracts | Protocol Buffers and gRPC |
 | Peer-to-peer | go-libp2p, with optional embedded Tailscale (planned) |
@@ -81,9 +83,7 @@ A more detailed description is available in [docs/architecture.md](docs/architec
 
 ### Prerequisites
 
-- Docker Desktop (Windows or macOS) or Docker Engine (Linux), with Compose v2
-- Go 1.26 or later, to build the host programs
-- mpv, for playback (optional at this stage)
+Docker is the only requirement: Docker Desktop on Windows or macOS, or Docker Engine on Linux, with Compose v2. Everything else runs in containers, including ffmpeg, the Python services and the optional indexer manager. The host programs are compiled inside a Go container when Go is not installed. Developers can install Go 1.26 or later to build natively.
 
 ### Installation
 
@@ -110,9 +110,11 @@ Options:
 | Windows | Linux and macOS | Effect |
 |---|---|---|
 | `-MediaDir D:\Media` | `--media /srv/media` | Use this folder as the media library. The choice is saved for later runs. |
+| `-WithIndexers` | `--with-indexers` | Also run Prowlarr at `http://127.0.0.1:9696` for indexers you configure yourself. The choice is saved for later runs. |
 | `-NoCache` | `--no-cache` | Rebuild the container images without the build cache |
+| `-BuildInDocker` | `--build-in-docker` | Compile the host programs in a Go container even when Go is installed |
 
-The script checks for Go and Docker, and starts Docker Desktop if it is installed but not running. When it finishes, the core API is available at `http://127.0.0.1:7700`. For example, `GET /healthz` and `GET /api/v1/version`.
+The script starts Docker Desktop if it is installed but not running. When it finishes, the core API is available at `http://127.0.0.1:7700`. For example, `GET /healthz` and `GET /api/v1/version`.
 
 With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Media NOCACHE=1`).
 
@@ -120,7 +122,7 @@ With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Medi
 
 | Command | Description |
 |---|---|
-| `marquee setup` | Check Docker, build the images, start the stack and verify it. Options: `-media DIR`, `-no-cache`. |
+| `marquee setup` | Check Docker, build the images, start the stack and verify it. Options: `-media DIR`, `-with-indexers`, `-no-cache`. |
 | `marquee up` | Build the images if needed and start the stack in the background |
 | `marquee down` | Stop the stack. Data volumes are kept. |
 | `marquee status` | Show the state of each service |
@@ -131,11 +133,14 @@ With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Medi
 ### Development
 
 ```sh
-make full-up  # build executables and images, start and verify the stack
-make test     # run Go tests
-make vet      # run go vet
-make check    # vet, test, Python syntax check and compose validation
+make full-up           # build executables and images, start and verify the stack
+make test              # run unit tests
+make test-integration  # run integration tests against the running stack
+make vet               # run go vet
+make check             # vet, test, Python syntax check and compose validation
 ```
+
+All tests live in [`tests/`](tests/README.md), organized by component.
 
 ## Repository layout
 
@@ -149,6 +154,7 @@ internal/
   launcher/      Environment checks and Compose lifecycle
   version/       Build metadata
 scripts/         One-command setup for Windows (full-up.ps1) and Linux/macOS (full-up.sh)
+tests/           Unit and integration tests, grouped by component
 py/
   audiolab/      Audio service: speech detection, subtitle alignment, stems
   recs/          Recommendation service
@@ -164,8 +170,8 @@ docs/            Architecture, data model, peer-to-peer design, roadmap
 | Phase | Scope |
 |---|---|
 | Foundation | Service skeleton, container stack, launcher and environment checks |
-| Streaming | Torrent engine, range streaming, mpv playback while downloading |
-| Library | Metadata, library layout, terminal interface, hardware profiling |
+| First runnable slice | Search, release selection, downloads, track probing and browser playback while downloading |
+| Player and hardware | mpv integration, hardware profiling, styled subtitles |
 | Subtitles | Subtitle sources, two-stage automatic synchronization |
 | Viewing | Continue watching, recommendations, automatic episode downloads |
 | Storage and audio | Storage tiers, idle-time compression, dialogue enhancement |
@@ -176,6 +182,7 @@ The full milestone list is in [docs/roadmap.md](docs/roadmap.md).
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Field study](docs/field-study.md)
 - [Data model](docs/data-model.md)
 - [Marquee Link (peer-to-peer)](docs/marquee-link.md)
 - [Roadmap](docs/roadmap.md)

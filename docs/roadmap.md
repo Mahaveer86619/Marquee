@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestones are delivered in the order below. Each one ends with working, tested software. Items marked optional are not scheduled.
+Marquee is built in the phases below. Each phase ends with working, tested software.
 
 ## Build order
 
@@ -12,65 +12,67 @@ Milestones are delivered in the order below. Each one ends with working, tested 
 - Launcher commands: `up`, `down`, `status`, `logs`, `doctor`
 - Draft service contracts
 
-### Phase 1: Streaming proof (M0)
+### Phase 1: First runnable slice (search, download, play in the browser)
 
-The riskiest part of the system, so it is built first.
+The first slice a user can run end to end. Design decisions come from the [field study](field-study.md).
 
-- Torrent engine in core with streaming-oriented piece priority
-- HTTP range server that waits for pieces instead of failing
-- Host agent starts mpv over IPC and plays from the stream URL
-- Seeking during download
+| Step | Deliverable |
+|---|---|
+| 1. Storage | `core.db` with migrations for titles, items, releases, torrents, files, tracks and the download queue |
+| 2. Metadata | TMDB client (key supplied by the user) and a keyless TVmaze fallback. Search, title details, seasons and episodes. Attribution screen. |
+| 3. Sources | Source provider interface with three implementations: Internet Archive (built in, public domain), Torznab (Prowlarr, Jackett, bitmagnet), and manual magnet or torrent file |
+| 4. Releases | Release-name parsing, file selection inside multi-file torrents, and scoring that favours browser-compatible releases |
+| 5. Downloads | Embedded torrent engine behind an interface. Queue, per-file selection, progress events over WebSocket. In-progress data on a named volume, moved to the library on completion. |
+| 6. Probing | ffprobe records the container, codecs, audio tracks, subtitle tracks and keyframes of every file |
+| 7. Playback | Browser player at `/watch/{id}`: direct play when compatible, otherwise HLS remux with the video copied and one playlist per audio track. Embedded and bundled text subtitles as WebVTT. Plays while downloading. |
+| 8. Terminal interface | Search box, results, title detail with seasons and episodes, release picker, downloads view with progress, and an action that opens the browser player |
 
-Exit criterion: a torrent plays in mpv on Windows while it is downloading, with the core running in Docker, and seeking works.
+Exit criteria:
+- A public-domain film found through search downloads from the Internet Archive, then plays in the browser while it is still downloading, with seeking.
+- A test file with two audio tracks and two subtitle tracks allows switching between them.
+- Every file path and track is recorded in `core.db`.
 
-### Phase 2: Library and interface (M1, M1a)
+### Phase 2: Player integration and hardware
 
-- Metadata search and title details from TMDB
-- Release search through user-configured indexers, with compatibility-aware scoring
-- Library layout, `core.db` with migrations
-- Terminal interface: search, title details, downloads, playback
+- Host agent starts mpv over IPC for files the browser cannot play
 - Hardware profiler on host and in containers; `marquee doctor` reports the chosen configuration
+- Styled (ASS) and image (PGS) subtitles in the browser player
 
-### Phase 3: Subtitles (M3, M5)
+### Phase 3: Subtitles
 
 - Embedded subtitle extraction and an external subtitle provider
 - Stage A synchronization with live reload in the player
 - Stage B synchronization with speech-to-text anchors and piecewise correction
 - Synchronization cache
 
-### Phase 4: Viewing experience (M4, M6, M7)
+### Phase 4: Viewing experience
 
 - Continue watching, resume points and next-episode handling
 - "Previously on" summary cards
-- Recommendations with explanations and a feedback loop
+- Recommendations with explanations, a feedback loop and collaborative filtering
 - Watch history import
 - Automatic download of upcoming episodes for followed series, within a disk budget
 
-### Phase 5: Storage and audio (M5a, M7a, M7b, M9a)
+### Phase 5: Storage and audio
 
 - Dialogue enhancement presets in the player
 - Storage tiers, lossless slimming, trash and approval flow, pinned titles
 - Idle-time re-encoding with a quality check; multiple drives
 - Dialogue, music and effects separation with independent levels
 
-### Phase 6: Web player and backup (M8, M9)
+### Phase 6: Player features, backup and extensibility
 
-- Browser player with direct play and remux fallback
+- Styled and image subtitles, and further player controls
 - Backup and restore to cloud storage or external drives
+- External provider plugins
 
-### Phase 7: Marquee Link (M12, M12a, M12b)
+### Phase 7: Marquee Link
 
 - Profile identities, QR pairing with verification code, sharing scopes
 - Peer-to-peer connectivity with NAT traversal and relay fallback; optional embedded Tailscale
 - Friend activity feed and shared recommendation signals
 - Co-watching with synchronized playback and live chat
 - Voice and video chat in rooms
-
-### Later and optional
-
-- M2: audio output device detection and selection
-- M10: collaborative filtering at scale, local summaries, external plugins
-- M11: server mode (not planned; the local-first design does not require it)
 
 ## Early technical investigations
 

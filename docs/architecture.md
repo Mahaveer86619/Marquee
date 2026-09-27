@@ -34,12 +34,18 @@ Hardware-facing work stays on the host because Docker Desktop runs containers in
 
 ## Playback path
 
-1. The torrent engine downloads the first and last pieces of the file first. Container formats keep their index at those positions, and the player needs them to start and seek.
-2. Pieces are then prioritized in a window ahead of the playback position. Seeking moves the window.
-3. The stream server answers range requests. When a requested piece is not yet available, the request waits for it instead of failing.
-4. mpv plays the stream directly. The browser player uses the same stream when the codecs are browser-compatible, remuxes without re-encoding when only the container is the problem, and converts only the audio track when the audio codec is unsupported.
+Marquee plays in a browser player served by the core service, and in mpv on the host. The choices below come from the [field study](field-study.md).
 
-Release selection takes player compatibility into account, so most titles need no processing at all.
+1. The torrent engine (anacrolix/torrent, behind a replaceable interface) downloads the first and last pieces of the file first. Container formats keep their index at those positions, and the player needs them to start and seek.
+2. Pieces are then prioritized in a window ahead of the read position. Seeking moves the window.
+3. Every file is probed with ffprobe: its container, codecs, audio tracks, subtitle tracks and keyframe times are recorded.
+4. The cheapest playback path is chosen:
+   - **Direct play** over HTTP range requests, when the container, video codec and selected audio track are all supported by the browser and the file has one audio track.
+   - **HLS remux** in every other case where the video codec is supported. The video stream is copied, never re-encoded. Each audio track becomes its own rendition, copied if compatible or converted to AAC. Segments start at real keyframes, and only segments whose data has been downloaded are listed.
+   - **Not playable in the browser**, when the video codec itself is unsupported, for example HEVC without a hardware decoder. The user is offered mpv instead.
+5. Text subtitles are served as WebVTT sidecar tracks, so their timing can be adjusted live.
+
+Release selection favours browser-compatible releases (H.264 video), so most titles play directly or with a remux only.
 
 ## Subtitle synchronization
 

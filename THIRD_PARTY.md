@@ -7,6 +7,7 @@ Marquee's own source code is licensed under the MIT License. It relies on the fo
 | Component | Where | License | Notes |
 |---|---|---|---|
 | ffmpeg / ffprobe | Container images (`core`, `audiolab`) | LGPL-2.1 or later; the Debian build includes GPL components | Installed from Debian packages and run as separate processes. Marquee does not link against ffmpeg libraries. Source code is available from Debian. |
+| Prowlarr | Optional container (`indexers` profile), image `lscr.io/linuxserver/prowlarr` | GPL-3.0 | Pulled from its publisher at install time and run as a separate service. Not modified or redistributed by Marquee. |
 | mpv | Host, installed by the user | GPL-2.0 or later / LGPL-2.1 or later | Not distributed with Marquee. Controlled over its IPC interface. |
 | Debian base image | Container images | Various free software licenses | `debian:stable-slim` |
 | Python | Container images | PSF License | `python:3.12-slim` |

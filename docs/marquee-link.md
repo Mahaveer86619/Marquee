@@ -31,7 +31,7 @@ After pairing, installations reconnect automatically whenever both are online.
 
 ## Friend feed
 
-Each profile keeps a signed, append-only log of the events it has chosen to share. When two friends are connected, they exchange any entries the other has not yet received, filtered by the scopes each has granted. In the first version, entries are exchanged only directly between author and recipient, never relayed through third parties.
+Each profile keeps a signed, append-only log of the events it has chosen to share. When two friends are connected, they exchange any entries the other has not yet received, filtered by the scopes each has granted. Entries are exchanged only directly between author and recipient, never relayed through third parties.
 
 Friend signals feed into recommendations as a "Friends loved" row and a limited boost in ranking, weighted by how similar each friend's taste is.
 

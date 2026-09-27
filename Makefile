@@ -15,7 +15,7 @@ VERSION ?= 0.0.0-dev
 COMMIT  ?= $(or $(shell git rev-parse --short HEAD 2>$(NULL)),unknown)
 LDFLAGS := -s -w -X marquee/internal/version.Version=$(VERSION) -X marquee/internal/version.Commit=$(COMMIT)
 
-.PHONY: build test vet check full-up up down doctor clean
+.PHONY: build test test-integration vet check full-up up down doctor clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/marquee$(EXE) ./cmd/marquee
@@ -23,6 +23,10 @@ build:
 
 test:
 	go test ./...
+
+# Requires a running stack (scripts/full-up or `marquee up`).
+test-integration:
+	go test -tags integration -count=1 ./tests/integration
 
 vet:
 	go vet ./...

@@ -3,43 +3,47 @@
     Builds the Marquee executables and container images, then starts and verifies the stack.
 
 .DESCRIPTION
-    Use this after cloning the repository, or at any time during development to
-    rebuild everything. It checks prerequisites, builds bin\marquee.exe and
-    bin\marquee-agent.exe, then runs "marquee setup", which starts Docker Desktop
-    if needed, builds the images, starts the services and runs the health checks.
+    Docker is the only prerequisite. If Go is installed, the executables are
+    built with it; otherwise they are built inside a Go container. The script
+    then runs "marquee setup", which starts Docker Desktop if needed, builds the
+    images, starts the services and runs the health checks.
 
 .PARAMETER MediaDir
     Host folder for the media library, for example D:\Media. Saved for later runs.
 
+.PARAMETER WithIndexers
+    Also run Prowlarr, so you can add your own indexers. Saved for later runs.
+
 .PARAMETER NoCache
     Rebuild the container images without the Docker build cache.
+
+.PARAMETER BuildInDocker
+    Build the executables inside a Go container even if Go is installed.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\full-up.ps1
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\full-up.ps1 -MediaDir D:\Media
+    powershell -ExecutionPolicy Bypass -File scripts\full-up.ps1 -MediaDir D:\Media -WithIndexers
 #>
 [CmdletBinding()]
 param(
     [string]$MediaDir,
-    [switch]$NoCache
+    [switch]$WithIndexers,
+    [switch]$NoCache,
+    [switch]$BuildInDocker
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-function Test-Tool([string]$Name, [string]$Hint) {
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        Write-Host "Missing prerequisite: $Name. $Hint" -ForegroundColor Red
-        exit 1
-    }
-}
-
 Write-Host 'Checking prerequisites'
-Test-Tool 'go'     'Install it with: winget install GoLang.Go'
-Test-Tool 'docker' 'Install Docker Desktop with: winget install Docker.DockerDesktop'
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Host 'Missing prerequisite: Docker. Install Docker Desktop with: winget install Docker.DockerDesktop' -ForegroundColor Red
+    exit 1
+}
+$useDockerGo = $BuildInDocker -or -not (Get-Command go -ErrorAction SilentlyContinue)
 
 $version = if ($env:MARQUEE_VERSION) { $env:MARQUEE_VERSION } else { '0.0.0-dev' }
 $commit = 'unknown'
@@ -50,16 +54,39 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     $ErrorActionPreference = 'Stop'
 }
 $ldflags = "-s -w -X marquee/internal/version.Version=$version -X marquee/internal/version.Commit=$commit"
+$goarch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 
-Write-Host "Building executables ($version, $commit)"
+if ($useDockerGo) {
+    Write-Host "Building executables in a Go container ($version, $commit)"
+    $ErrorActionPreference = 'Continue'
+    docker info *> $null
+    $dockerUp = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = 'Stop'
+    if (-not $dockerUp) {
+        Write-Host 'Docker is not running. Start Docker Desktop and run this script again.' -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "Building executables ($version, $commit)"
+}
+
 foreach ($target in @(@('marquee', './cmd/marquee'), @('marquee-agent', './cmd/agent'))) {
-    go build -trimpath -ldflags $ldflags -o "bin/$($target[0]).exe" $target[1]
+    $out = "bin/$($target[0]).exe"
+    if ($useDockerGo) {
+        docker run --rm -v "${root}:/src" -w /src `
+            -e CGO_ENABLED=0 -e GOOS=windows -e GOARCH=$goarch `
+            -e GOCACHE=/src/.cache/go-build -e GOMODCACHE=/src/.cache/gomod `
+            golang:1.27 go build -trimpath -ldflags $ldflags -o $out $target[1]
+    } else {
+        go build -trimpath -ldflags $ldflags -o $out $target[1]
+    }
     if ($LASTEXITCODE -ne 0) { Write-Host "Build failed: $($target[0])" -ForegroundColor Red; exit $LASTEXITCODE }
 }
 
 $setupArgs = @('setup')
-if ($MediaDir) { $setupArgs += @('-media', $MediaDir) }
-if ($NoCache)  { $setupArgs += '-no-cache' }
+if ($MediaDir)     { $setupArgs += @('-media', $MediaDir) }
+if ($WithIndexers) { $setupArgs += '-with-indexers' }
+if ($NoCache)      { $setupArgs += '-no-cache' }
 
 & "$root\bin\marquee.exe" @setupArgs
 exit $LASTEXITCODE

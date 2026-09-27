@@ -11,6 +11,7 @@ Thank you for your interest in Marquee. The project is in early development, and
 ## Guidelines
 
 - **Scope:** keep changes focused on one concern, and include tests for new behavior.
+- **Tests:** they go in `tests/<component>/` as black-box tests of the exported API. Tests that need the running stack go in `tests/integration/`, behind the `integration` build tag. See [tests/README.md](tests/README.md).
 - **Go:** format with `gofmt`; `go vet ./...` and `go test ./...` must pass.
 - **Python:** target Python 3.12. Prefer ONNX Runtime or CTranslate2 over PyTorch in the default images.
 - **Dependencies:** they must be compatible with the MIT License (MIT, BSD, Apache-2.0 or MPL-2.0). Discuss any GPL or AGPL dependency in an issue first.

@@ -36,7 +36,7 @@ Never copy secrets, API keys, or personal data into notes.
 1. **No video re-encoding in the playback path.** The fallback ladder is direct play → remux (`-c copy`) → audio-only conversion → mpv. Video re-encoding is allowed only in the optimizer's idle-only compression jobs.
 2. **Players stream from HTTP URLs** (`/stream/{id}`), never from file paths.
 3. **One writing service per SQLite database.** `core.db` is written only by core; `recs.db` only by recs. Nothing else opens them for writing, and no database file is shared between containers.
-4. **Docker runs everything except hardware access.** Core, the Python services, ffmpeg and future feature services run in containers on every OS, Windows included. Only the launcher/TUI (`marquee.exe`) and the host agent (`marquee-agent.exe`: mpv, audio devices, drives, browser launch, local backups) are native.
+4. **Docker runs everything except hardware access.** Core, the Python services, ffmpeg and any additional feature services run in containers on every OS, Windows included. Only the launcher/TUI (`marquee.exe`) and the host agent (`marquee-agent.exe`: mpv, audio devices, drives, browser launch, local backups) are native.
 5. **Playback has top priority.** Every background job must go through the resource governor and be pausable.
 6. **Providers sit behind interfaces** (`MetadataProvider`, `IndexerProvider`, `SubtitleProvider`, `AvailabilityProvider`, `HistoryImporter`, `BackupTarget`). Don't hard-wire a source into core logic.
 7. **Deleting user media requires approval** unless the user turned on auto mode. Deleted files go to trash with a grace period first.
@@ -44,16 +44,16 @@ Never copy secrets, API keys, or personal data into notes.
 9. **Windows-first, Docker-based.** The first target is Windows with Docker Desktop (WSL2) plus the two native executables. Keep host-side OS code behind build tags (`_windows.go`, `_linux.go`, `_darwin.go`) so Linux and macOS can be added later. A new feature is a new compose service or profile; don't grow the native executables for server-side features.
 10. **Don't bundle GPL binaries in the `.exe` release.** ffmpeg lives only in Docker images, installed from Debian packages. mpv is installed on the host by the user or via `winget` after they confirm. The project is MIT-licensed.
 
-11. **Local-first, no hosting.** v1 is local Docker Compose only; the API binds to `127.0.0.1`. Server mode (M11) is deferred; don't build toward it unless asked. Per-person tables carry `profile_id`.
+11. **Local-first, no hosting.** Marquee runs locally with Docker Compose; the API binds to `127.0.0.1`. Don't build hosted or server features. Per-person tables carry `profile_id`.
 12. **SQLite only** (no Postgres). WAL, STRICT tables, UUIDv7 IDs. **`notes/SCHEMA.md` is the schema source of truth:** any migration must update it in the same change.
-13. **Marquee Link (P2P) shares metadata only.** Never send media files, file paths, release names, infohashes, magnets, indexer or storage data to peers. Shared payloads use TMDB refs (`tmdb:tv:<id>:sXXeYY`), never local UUIDs. Accept data only from key-pinned, emoji-verified accepted friends, only within granted scopes, and in v1 **only directly from the author** (no relaying). Payloads are validated data, never executed. **No hosting:** never add a feature that needs a project-run or user-run server (D-019). Keep identity and trust independent of the transport (libp2p or tsnet).
+13. **Marquee Link (P2P) shares metadata only.** Never send media files, file paths, release names, infohashes, magnets, indexer or storage data to peers. Shared payloads use TMDB refs (`tmdb:tv:<id>:sXXeYY`), never local UUIDs. Accept data only from key-pinned, emoji-verified accepted friends, only within granted scopes, and **only directly from the author** (no relaying). Payloads are validated data, never executed. **No hosting:** never add a feature that needs a project-run or user-run server (D-019). Keep identity and trust independent of the transport (libp2p or tsnet).
 14. **Security review before shipping Link, co-watch, stream endpoints or secrets handling** (run `/security-review`).
 
 ## Stack and conventions
 - **Go** (core, agent, tui, optimizer): Go modules at the repo root, `cmd/` for binaries, `internal/` for packages. SQLite via `modernc.org/sqlite` (no cgo), queries through `sqlc`, migrations through `goose`. TUI in Bubble Tea.
 - **Python** (`py/audiolab`, `py/recs`): one project per service with `pyproject.toml`, locked with `uv`, built into images. Avoid PyTorch in the default images (prefer ONNX Runtime / CTranslate2); torch-only models go in optional images. gRPC contracts live in `/proto` and are generated for both languages.
 - **Web player**: `web/`, TypeScript.
-- **Deploy**: `deploy/compose.yaml` (profiles `cpu`, `gpu-nvidia`, `indexers`, `stems`, plus future feature profiles) is embedded in `marquee.exe`, which runs `docker compose -p marquee`. Host executables are `GOOS=windows` builds. A native core build must keep compiling for dev/debug, but isn't a user mode.
+- **Deploy**: `deploy/compose.yaml` (profiles `cpu`, `gpu-nvidia`, `indexers`, `stems`, plus one per additional feature service) is embedded in `marquee.exe`, which runs `docker compose -p marquee`. Host executables are `GOOS=windows` builds. A native core build must keep compiling for dev/debug, but isn't a user mode.
 - **License**: MIT (`LICENSE`). New dependencies must be license-compatible: MIT, BSD, Apache-2.0 or MPL-2.0 are fine. Flag any GPL/AGPL dependency in DECISIONS.md before adding it.
 - Match the surrounding code's style. Keep comments sparse and useful.
 
@@ -64,9 +64,13 @@ Marquee ships with **no content sources**. Don't add built-in scrapers for torre
 Phase 0 (foundation) is done as of 2026-09-27: Go module `marquee` (`cmd/core`, `cmd/marquee`, `cmd/agent`, `internal/{api,launcher,version}`), Python skeletons (`py/audiolab`, `py/recs`), `deploy/compose.yaml` + `deploy/docker/*.Dockerfile`, draft protos, public docs in `docs/`, CI. **Next: M0 streaming proof** (see `docs/roadmap.md` and `notes/ROADMAP.md`).
 
 - `make check` must pass before a change is done (vet, test, Python compile, compose config).
-- Public docs (`README.md`, `docs/`) are formal and contain no emojis. Keep them in sync with `notes/` when the design changes; `notes/` holds the detail.
+- **Tests live in `tests/`**, never next to the code. Use `tests/<component>/` with `package <component>_test`, importing `marquee/internal/...`. Tests that need the running stack go in `tests/integration/` behind `//go:build integration` (`make test-integration`). Fixtures go in `tests/fixtures/`. To test something unexported, export it deliberately with a doc comment.
+- **Docker covers every install.** Users need only Docker. ffmpeg, the Python services, Prowlarr (profile `indexers`) and new tools run as containers. The host executables build in `golang:1.27` when Go is absent (scripts/full-up). Never require a host install beyond Docker; mpv is the only host-side exception, and it's optional.
+- On Windows, don't write files with .NET `[IO.File]` methods and relative paths: they resolve against the process directory, not the PowerShell location (see F-018). Use the Edit/Write tools.
+- Public docs (`README.md`, `docs/`) are formal, contain no emojis, and describe **only the current product scope (a single release, v1)**. No version splits, no "later" or deferred features, no internal milestone IDs. Items that aren't planned stay in `notes/` only. Keep public docs in sync with `notes/`; `notes/` holds the detail.
+- `notes/` also avoids version splits: everything planned is v1. Items the user set aside are marked "not planned" or "optional", never "v2" or "later version".
 - The user manages git themselves. Don't commit unless asked.
 - Module path is `marquee` for now; switch to `github.com/<owner>/marquee` once the GitHub repo exists.
 
-## Deferred / optional
-- **M2: audio output device detection/selection** is optional and deferred. Don't build it unless asked, but don't design anything that rules it out: mpv control stays in the host agent.
+## Scope
+Build only what `notes/ROADMAP.md` schedules. Items marked "not planned" or "optional" there are out of scope unless the user asks for them.

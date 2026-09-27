@@ -46,3 +46,6 @@ config.local.yaml
 Thumbs.db
 .idea/
 .vscode/
+
+# Go build caches used by scripts/full-up when building in a container
+/.cache/
