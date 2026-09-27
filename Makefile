@@ -1,12 +1,18 @@
 ifeq ($(OS),Windows_NT)
-EXE := .exe
+EXE     := .exe
+NULL    := NUL
+LAUNCH  := bin\marquee.exe
+RMBIN   := if exist bin rmdir /s /q bin
 else
-EXE :=
+EXE     :=
+NULL    := /dev/null
+LAUNCH  := ./bin/marquee
+RMBIN   := rm -rf bin
 endif
 
 COMPOSE := deploy/compose.yaml
 VERSION ?= 0.0.0-dev
-COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+COMMIT  ?= $(or $(shell git rev-parse --short HEAD 2>$(NULL)),unknown)
 LDFLAGS := -s -w -X marquee/internal/version.Version=$(VERSION) -X marquee/internal/version.Commit=$(COMMIT)
 
 .PHONY: build test vet check up down doctor clean
@@ -26,14 +32,14 @@ check: vet test
 	docker compose -f $(COMPOSE) config -q
 
 up: build
-	./bin/marquee$(EXE) up
+	$(LAUNCH) up
 
 down:
-	./bin/marquee$(EXE) down
+	$(LAUNCH) down
 
 doctor:
-	./bin/marquee$(EXE) doctor
+	$(LAUNCH) doctor
 
 clean:
 	go clean
-	rm -rf bin
+	$(RMBIN)

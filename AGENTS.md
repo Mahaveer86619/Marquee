@@ -60,8 +60,13 @@ Never copy secrets, API keys, or personal data into notes.
 ## Scope and legal guardrail
 Marquee ships with **no content sources**. Don't add built-in scrapers for torrent sites or streaming platforms, and don't add DRM circumvention. Indexers come from user configuration (Torznab / Prowlarr). Streaming-platform data comes only from official or public APIs (TMDB watch providers, Trakt) and the user's own exports.
 
-## Planning phase
-As of 2026-09-27 the project is in **planning only**. The user will start implementation later. Don't scaffold code or create source files unless the user explicitly asks; update the plan in `notes/` instead.
+## Current phase
+Phase 0 (foundation) is done as of 2026-09-27: Go module `marquee` (`cmd/core`, `cmd/marquee`, `cmd/agent`, `internal/{api,launcher,version}`), Python skeletons (`py/audiolab`, `py/recs`), `deploy/compose.yaml` + `deploy/docker/*.Dockerfile`, draft protos, public docs in `docs/`, CI. **Next: M0 streaming proof** (see `docs/roadmap.md` and `notes/ROADMAP.md`).
+
+- `make check` must pass before a change is done (vet, test, Python compile, compose config).
+- Public docs (`README.md`, `docs/`) are formal and contain no emojis. Keep them in sync with `notes/` when the design changes; `notes/` holds the detail.
+- The user manages git themselves. Don't commit unless asked.
+- Module path is `marquee` for now; switch to `github.com/<owner>/marquee` once the GitHub repo exists.
 
 ## Deferred / optional
 - **M2: audio output device detection/selection** is optional and deferred. Don't build it unless asked, but don't design anything that rules it out: mpv control stays in the host agent.
