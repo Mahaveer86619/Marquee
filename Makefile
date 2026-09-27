@@ -15,7 +15,7 @@ VERSION ?= 0.0.0-dev
 COMMIT  ?= $(or $(shell git rev-parse --short HEAD 2>$(NULL)),unknown)
 LDFLAGS := -s -w -X marquee/internal/version.Version=$(VERSION) -X marquee/internal/version.Commit=$(COMMIT)
 
-.PHONY: build test vet check up down doctor clean
+.PHONY: build test vet check full-up up down doctor clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/marquee$(EXE) ./cmd/marquee
@@ -30,6 +30,11 @@ vet:
 check: vet test
 	python -m compileall -q py
 	docker compose -f $(COMPOSE) config -q
+
+# Build executables and images, start the stack and verify it.
+# Optional: make full-up MEDIA=D:/Media NOCACHE=1
+full-up: build
+	$(LAUNCH) setup $(if $(MEDIA),-media $(MEDIA)) $(if $(NOCACHE),-no-cache)
 
 up: build
 	$(LAUNCH) up

@@ -13,15 +13,18 @@ import (
 	"marquee/internal/version"
 )
 
-const usage = `Usage: marquee [flags] <command>
+const usage = `Usage: marquee [flags] <command> [command flags]
 
 Commands:
+  setup     First-time setup: check Docker, build images, start and verify the stack
   up        Build (if needed) and start the stack in the background
   down      Stop the stack (volumes are kept)
   status    Show the state of each service
   logs      Follow service logs
   doctor    Check Docker, the core service and host tools
   version   Print the version
+
+Run "marquee setup -h" for setup options.
 
 Flags:
 `
@@ -35,7 +38,7 @@ func main() {
 	}
 	flag.Parse()
 
-	if flag.NArg() != 1 {
+	if flag.NArg() < 1 {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -43,8 +46,26 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	cmd, args := flag.Arg(0), flag.Args()[1:]
+	if cmd != "setup" && len(args) > 0 {
+		fmt.Fprintf(os.Stderr, "%s takes no arguments\n", cmd)
+		os.Exit(2)
+	}
+
 	var err error
-	switch flag.Arg(0) {
+	switch cmd {
+	case "setup":
+		fs := flag.NewFlagSet("setup", flag.ExitOnError)
+		media := fs.String("media", "", "host folder for the media library (saved for later runs)")
+		noCache := fs.Bool("no-cache", false, "rebuild images without the build cache")
+		_ = fs.Parse(args)
+		err = launcher.Setup(ctx, launcher.SetupOptions{
+			ComposeFile: *composeFile,
+			CoreURL:     *coreURL,
+			MediaDir:    *media,
+			NoCache:     *noCache,
+			Out:         os.Stdout,
+		})
 	case "up":
 		err = launcher.Compose(ctx, *composeFile, "up", "-d", "--build", "--wait")
 	case "down":
