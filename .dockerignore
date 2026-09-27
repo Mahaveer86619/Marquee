@@ -1,0 +1,13 @@
+.git
+.github
+notes
+docs
+bin
+media
+cache
+data
+**/__pycache__
+**/*.pyc
+**/.venv
+*.md
+!py/**/README.md

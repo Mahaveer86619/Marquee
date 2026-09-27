@@ -1,0 +1,30 @@
+// Draft contracts. Not yet generated or implemented; they will change.
+syntax = "proto3";
+
+package marquee.v1;
+
+option go_package = "marquee/gen/marquee/v1;marqueev1";
+
+// Universal content reference, e.g. "tmdb:movie:603" or "tmdb:tv:1399:s01e01".
+message ItemRef {
+  string ref = 1;
+}
+
+// A piecewise-linear time mapping from one timeline to another.
+message TimeMapping {
+  message Segment {
+    int64 from_ms = 1;
+    int64 to_ms = 2;
+    double scale = 3;
+    int64 offset_ms = 4;
+  }
+  repeated Segment segments = 1;
+  double confidence = 2;
+}
+
+message JobProgress {
+  string job_id = 1;
+  double progress = 2;   // 0..1
+  string stage = 3;
+  string message = 4;
+}

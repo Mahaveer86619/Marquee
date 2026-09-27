@@ -1,0 +1,58 @@
+// Draft contracts. Not yet generated or implemented; they will change.
+syntax = "proto3";
+
+package marquee.v1;
+
+option go_package = "marquee/gen/marquee/v1;marqueev1";
+
+// Recommendation service. Owns recs.db; receives events, never reads core.db.
+service Recs {
+  // Stream of interaction events from core (watch progress, ratings, ...).
+  rpc Ingest(stream InteractionEvent) returns (IngestAck);
+  // Recommendation rows for the home screen of one profile.
+  rpc HomeRows(HomeRowsRequest) returns (HomeRowsResponse);
+  // Rewatch probability for the storage manager and pin suggestions.
+  rpc RewatchPredictions(RewatchRequest) returns (RewatchResponse);
+}
+
+message InteractionEvent {
+  string profile_id = 1;
+  string title_ref = 2;          // e.g. "tmdb:tv:1399"
+  string kind = 3;               // progress | completed | rated | watchlisted | dismissed | friend_signal
+  double value = 4;
+  int64 at_ms = 5;
+  string friend_peer_id = 6;     // set for friend signals
+}
+
+message IngestAck {
+  int64 accepted = 1;
+}
+
+message HomeRowsRequest {
+  string profile_id = 1;
+  int32 max_rows = 2;
+  int32 max_items_per_row = 3;
+}
+
+message HomeRowsResponse {
+  message Item {
+    string title_ref = 1;
+    double score = 2;
+    string reason = 3;           // e.g. "Because you watched Arrival"
+  }
+  message Row {
+    string key = 1;
+    string title = 2;
+    repeated Item items = 3;
+  }
+  repeated Row rows = 1;
+}
+
+message RewatchRequest {
+  string profile_id = 1;
+  repeated string title_refs = 2;
+}
+
+message RewatchResponse {
+  map<string, double> probability = 1;
+}

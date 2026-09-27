@@ -1,0 +1,71 @@
+// Draft contracts. Not yet generated or implemented; they will change.
+syntax = "proto3";
+
+package marquee.v1;
+
+option go_package = "marquee/gen/marquee/v1;marqueev1";
+
+// Marquee Link (peer-to-peer) as seen by core. Owns social.db.
+// Peer-to-peer wire protocols (/marquee/pair/1, /feed/1, /room/1, /dm/1,
+// /presence/1) are defined separately; this service is the local interface.
+service Social {
+  rpc CreatePairingCode(CreatePairingCodeRequest) returns (PairingCode);
+  rpc AcceptPairing(AcceptPairingRequest) returns (PairingStatus);
+  rpc ConfirmPairing(ConfirmPairingRequest) returns (PairingStatus);
+  // Local events that may become feed entries, filtered by friend scopes.
+  rpc Publish(PublishRequest) returns (PublishAck);
+  rpc Feed(FeedRequest) returns (FeedResponse);
+}
+
+message CreatePairingCodeRequest {
+  string profile_id = 1;
+}
+
+message PairingCode {
+  string uri = 1;                // marquee://pair?v=1&...
+  int64 expires_at_ms = 2;
+}
+
+message AcceptPairingRequest {
+  string profile_id = 1;
+  string uri = 2;
+}
+
+message ConfirmPairingRequest {
+  string profile_id = 1;
+  string peer_id = 2;
+  bool confirmed = 3;            // the users compared the short code
+}
+
+message PairingStatus {
+  string peer_id = 1;
+  string state = 2;              // pending_verify | accepted | rejected
+  string short_code = 3;         // six-symbol verification code shown to both users
+}
+
+message PublishRequest {
+  string profile_id = 1;
+  string kind = 2;               // watched | rated | reviewed | watchlisted | taste_summary
+  string payload_json = 3;       // universal refs only; never files or release data
+}
+
+message PublishAck {
+  int64 seq = 1;
+}
+
+message FeedRequest {
+  string profile_id = 1;
+  int32 limit = 2;
+  string before_hlc = 3;
+}
+
+message FeedResponse {
+  message Entry {
+    string author_peer_id = 1;
+    string author_name = 2;
+    string kind = 3;
+    string payload_json = 4;
+    string hlc = 5;
+  }
+  repeated Entry entries = 1;
+}

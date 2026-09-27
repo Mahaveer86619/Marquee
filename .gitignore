@@ -1,0 +1,48 @@
+# Agent working memory: local only, never pushed
+notes/
+
+# Runtime data
+/data/
+/media/
+/cache/
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Models / weights
+*.pt
+*.onnx
+*.safetensors
+/models/
+
+# Web
+node_modules/
+web/dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+config.local.yaml
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

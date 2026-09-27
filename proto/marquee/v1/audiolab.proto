@@ -1,0 +1,52 @@
+// Draft contracts. Not yet generated or implemented; they will change.
+syntax = "proto3";
+
+package marquee.v1;
+
+import "marquee/v1/common.proto";
+
+option go_package = "marquee/gen/marquee/v1;marqueev1";
+
+// Audio worker: subtitle alignment and dialogue stem separation.
+service Audiolab {
+  // Stage A (voice activity) and Stage B (speech-to-text anchors) alignment.
+  rpc AlignSubtitles(AlignSubtitlesRequest) returns (stream AlignSubtitlesEvent);
+  // Separate dialogue, music and effects stems for a time range.
+  rpc SeparateStems(SeparateStemsRequest) returns (stream JobProgress);
+  // Report hardware facts and benchmark results from inside the container.
+  rpc Profile(ProfileRequest) returns (ProfileResponse);
+}
+
+message AlignSubtitlesRequest {
+  string job_id = 1;
+  string media_url = 2;          // core stream URL; only downloaded ranges are read
+  string subtitle_path = 3;      // path in the shared cache volume
+  repeated string stages = 4;    // "A", "B"
+  string model = 5;              // chosen by the hardware profiler, e.g. "whisper-base-int8"
+  repeated int64 window_starts_ms = 6;
+}
+
+message AlignSubtitlesEvent {
+  oneof event {
+    JobProgress progress = 1;
+    TimeMapping mapping = 2;     // emitted after each refinement
+  }
+}
+
+message SeparateStemsRequest {
+  string job_id = 1;
+  string media_url = 2;
+  int64 from_ms = 3;
+  int64 to_ms = 4;
+  string model = 5;
+  string output_dir = 6;
+}
+
+message ProfileRequest {
+  bool run_benchmarks = 1;
+}
+
+message ProfileResponse {
+  string facts_json = 1;
+  string benchmarks_json = 2;
+}

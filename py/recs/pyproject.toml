@@ -1,0 +1,14 @@
+[project]
+name = "marquee-recs"
+version = "0.0.0"
+description = "Marquee recommendation service: embeddings, taste profiles, collaborative filtering, friend signals."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["marquee_recs"]

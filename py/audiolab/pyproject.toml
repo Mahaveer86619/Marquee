@@ -1,0 +1,14 @@
+[project]
+name = "marquee-audiolab"
+version = "0.0.0"
+description = "Marquee audio worker: voice activity detection, speech-to-text subtitle alignment, dialogue stem separation."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["marquee_audiolab"]

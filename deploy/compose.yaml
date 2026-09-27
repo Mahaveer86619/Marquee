@@ -1,0 +1,66 @@
+# Marquee local stack. Start it with `marquee up` (or `docker compose -f deploy/compose.yaml up -d`).
+# Only the core API is published, and only on the loopback interface.
+
+name: marquee
+
+x-python-health: &python-health
+  interval: 15s
+  timeout: 3s
+  retries: 5
+  start_period: 5s
+
+services:
+  core:
+    build:
+      context: ..
+      dockerfile: deploy/docker/core.Dockerfile
+    image: marquee/core:dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7700:7700"
+    environment:
+      MARQUEE_CORE_ADDR: ":7700"
+      MARQUEE_DATA_DIR: /data
+      MARQUEE_CACHE_DIR: /cache
+      MARQUEE_MEDIA_DIR: /media
+      MARQUEE_AUDIOLAB_URL: http://audiolab:7710
+      MARQUEE_RECS_URL: http://recs:7720
+    volumes:
+      - marquee-data:/data
+      - marquee-cache:/cache
+      - ${MARQUEE_MEDIA_DIR:-../media}:/media
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/marquee-core", "-healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  audiolab:
+    build:
+      context: ..
+      dockerfile: deploy/docker/audiolab.Dockerfile
+    image: marquee/audiolab:dev
+    restart: unless-stopped
+    volumes:
+      - marquee-cache:/cache
+    healthcheck:
+      <<: *python-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7710/healthz', timeout=2)"]
+
+  recs:
+    build:
+      context: ..
+      dockerfile: deploy/docker/recs.Dockerfile
+    image: marquee/recs:dev
+    restart: unless-stopped
+    volumes:
+      - marquee-recs:/data
+    healthcheck:
+      <<: *python-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7720/healthz', timeout=2)"]
+
+volumes:
+  marquee-data:
+  marquee-cache:
+  marquee-recs:
