@@ -85,28 +85,42 @@ A more detailed description is available in [docs/architecture.md](docs/architec
 - Go 1.26 or later, to build the host programs
 - mpv, for playback (optional at this stage)
 
-### Build and run
+### Installation
 
-```sh
-git clone https://github.com/<your-username>/marquee.git
-cd marquee
+A single command builds the host programs and the container images, starts the stack and verifies it. It is safe to run again at any time, for example after pulling changes.
 
-# Build the host programs into ./bin
-make build
+Windows (PowerShell):
 
-# Build the images and start the stack
-./bin/marquee up
-
-# Check the environment and service health
-./bin/marquee doctor
+```powershell
+git clone https://github.com/Mahaveer86619/Marquee.git
+cd Marquee
+powershell -ExecutionPolicy Bypass -File scripts\full-up.ps1
 ```
 
-The core API is then available at `http://127.0.0.1:7700`. For example, `GET /healthz` and `GET /api/v1/version`.
+Linux and macOS:
+
+```sh
+git clone https://github.com/Mahaveer86619/Marquee.git
+cd Marquee
+sh scripts/full-up.sh
+```
+
+Options:
+
+| Windows | Linux and macOS | Effect |
+|---|---|---|
+| `-MediaDir D:\Media` | `--media /srv/media` | Use this folder as the media library. The choice is saved for later runs. |
+| `-NoCache` | `--no-cache` | Rebuild the container images without the build cache |
+
+The script checks for Go and Docker, and starts Docker Desktop if it is installed but not running. When it finishes, the core API is available at `http://127.0.0.1:7700`. For example, `GET /healthz` and `GET /api/v1/version`.
+
+With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Media NOCACHE=1`).
 
 ### Launcher commands
 
 | Command | Description |
 |---|---|
+| `marquee setup` | Check Docker, build the images, start the stack and verify it. Options: `-media DIR`, `-no-cache`. |
 | `marquee up` | Build the images if needed and start the stack in the background |
 | `marquee down` | Stop the stack. Data volumes are kept. |
 | `marquee status` | Show the state of each service |
@@ -117,6 +131,7 @@ The core API is then available at `http://127.0.0.1:7700`. For example, `GET /he
 ### Development
 
 ```sh
+make full-up  # build executables and images, start and verify the stack
 make test     # run Go tests
 make vet      # run go vet
 make check    # vet, test, Python syntax check and compose validation
@@ -133,6 +148,7 @@ internal/
   api/           HTTP API of the core service
   launcher/      Environment checks and Compose lifecycle
   version/       Build metadata
+scripts/         One-command setup for Windows (full-up.ps1) and Linux/macOS (full-up.sh)
 py/
   audiolab/      Audio service: speech detection, subtitle alignment, stems
   recs/          Recommendation service

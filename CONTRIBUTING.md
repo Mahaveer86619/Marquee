@@ -5,8 +5,8 @@ Thank you for your interest in Marquee. The project is in early development, and
 ## Development setup
 
 1. Install Docker (Desktop or Engine, with Compose v2), Go 1.26 or later, and Python 3.12 or later.
-2. Clone the repository and run `make check` to vet, test and validate the stack.
-3. Run `make up` to build and start the stack, and `./bin/marquee doctor` to confirm it is healthy.
+2. Clone the repository and run `make full-up`, or `scripts/full-up.ps1` on Windows without make. This builds the executables and images, starts the stack and verifies it.
+3. Run `make check` before submitting a change. It vets, tests and validates the stack.
 
 ## Guidelines
 
