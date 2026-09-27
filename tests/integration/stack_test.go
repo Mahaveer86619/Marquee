@@ -55,6 +55,33 @@ func TestCoreStatusListsProviders(t *testing.T) {
 	}
 }
 
+// TestSearchTitleAndSeason needs internet access (TMDB or TVmaze).
+func TestSearchTitleAndSeason(t *testing.T) {
+	search := getJSON(t, "/api/v1/search?q=sherlock")
+	results, _ := search["results"].([]any)
+	if len(results) == 0 {
+		t.Fatalf("no search results (source %v)", search["source"])
+	}
+	var ref string
+	for _, r := range results {
+		if m, _ := r.(map[string]any); m["kind"] == "series" {
+			ref, _ = m["ref"].(string)
+			break
+		}
+	}
+	if ref == "" {
+		t.Fatal("no series in the search results")
+	}
+	title := getJSON(t, "/api/v1/titles/"+ref)
+	if seasons, _ := title["seasons"].([]any); len(seasons) == 0 {
+		t.Fatalf("title %s has no seasons", ref)
+	}
+	episodes, _ := getJSON(t, "/api/v1/titles/"+ref+"/seasons/1")["episodes"].([]any)
+	if len(episodes) == 0 {
+		t.Fatalf("season 1 of %s has no episodes", ref)
+	}
+}
+
 func TestCoreVersion(t *testing.T) {
 	if got := getJSON(t, "/api/v1/version")["service"]; got != "core" {
 		t.Fatalf("service = %v, want core", got)

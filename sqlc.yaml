@@ -1,0 +1,13 @@
+# sqlc generates typed Go code for the queries in internal/store/queries from
+# the schema in internal/store/migrations. Regenerate with `make generate`.
+version: "2"
+sql:
+  - engine: sqlite
+    schema: internal/store/migrations
+    queries: internal/store/queries
+    gen:
+      go:
+        package: db
+        out: internal/store/db
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true

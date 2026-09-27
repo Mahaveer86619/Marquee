@@ -2,7 +2,7 @@
 
 Marquee is a local-first media system with a terminal interface. It finds and downloads films and series, starts playback while the download is still in progress, keeps subtitles in sync automatically, and recommends what to watch next. Friends' installations connect directly to each other, without a central server, for synchronized co-watching and shared recommendations.
 
-> **Project status:** early development. The repository contains the service skeleton, container stack and host launcher. Feature work follows the [roadmap](docs/roadmap.md).
+> **Project status:** early development. The container stack, launcher, metadata search and the terminal search interface work today. Release search, downloads and playback follow the [roadmap](docs/roadmap.md).
 
 ---
 
@@ -136,6 +136,7 @@ No API key is required to start. A TMDB read token enables film search and poste
 
 | Command | Description |
 |---|---|
+| `marquee` | Open the terminal interface: search with a live preview, then browse titles (poster, release dates, rating, credits, networks), seasons and episodes |
 | `marquee setup` | Check Docker, build the images, start the stack and verify it. Options: `-media DIR`, `-with-indexers`, `-no-cache`. |
 | `marquee up` | Build the images if needed and start the stack in the background |
 | `marquee down` | Stop the stack. Data volumes are kept. |
@@ -152,10 +153,12 @@ make full-up           # build executables and images, start and verify the stac
 make test              # run unit tests
 make test-integration  # run integration tests against the running stack
 make vet               # run go vet
+make generate          # regenerate typed database code from SQL (sqlc, in Docker)
 make check             # vet, test, Python syntax check and compose validation
+make logs-core         # follow the core service's logs
 ```
 
-All tests live in [`tests/`](tests/README.md), organized by component.
+All tests live in [`tests/`](tests/README.md), organized by component. Database queries are written as named SQL in `internal/store/queries/` and compiled to typed Go code with [sqlc](https://sqlc.dev); set `MARQUEE_LOG_SQL=1` to log each query with its timing.
 
 ## Repository layout
 

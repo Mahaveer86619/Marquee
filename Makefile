@@ -15,7 +15,17 @@ VERSION ?= 0.0.0-dev
 COMMIT  ?= $(or $(shell git rev-parse --short HEAD 2>$(NULL)),unknown)
 LDFLAGS := -s -w -X marquee/internal/version.Version=$(VERSION) -X marquee/internal/version.Commit=$(COMMIT)
 
-.PHONY: build test test-integration vet check full-up up down doctor clean
+SQLC := docker run --rm -v "$(CURDIR):/src" -w /src sqlc/sqlc:1.31.1
+
+.PHONY: build test test-integration vet check generate generate-check full-up up down doctor logs logs-core clean
+
+# Regenerate typed database code from internal/store/queries (runs sqlc in Docker).
+generate:
+	$(SQLC) generate
+
+# Fails when the generated code is out of date with the queries or migrations.
+generate-check:
+	$(SQLC) diff
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/marquee$(EXE) ./cmd/marquee
@@ -48,6 +58,14 @@ down:
 
 doctor:
 	$(LAUNCH) doctor
+
+# Follow live logs. All services by default: make logs SERVICE=core
+logs:
+	$(LAUNCH) logs $(SERVICE)
+
+# Shortcut for the core service's logs.
+logs-core:
+	$(LAUNCH) logs core
 
 clean:
 	go clean

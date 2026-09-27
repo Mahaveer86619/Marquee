@@ -41,19 +41,22 @@ func TestCheckCore(t *testing.T) {
 func TestCheckProviders(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"providers":{"tmdb":true,"prowlarr":false}}`))
+		_, _ = w.Write([]byte(`{"providers":{"tmdb":true,"prowlarr":false,"subdl":true},"checks":{"tmdb":"valid","subdl":"invalid"}}`))
 	}))
 	defer srv.Close()
 
-	byName := map[string]launcher.Status{}
+	byName := map[string]launcher.Result{}
 	for _, r := range launcher.CheckProviders(context.Background(), srv.URL) {
-		byName[r.Name] = r.Status
+		byName[r.Name] = r
 	}
-	if byName["tmdb key"] != launcher.OK {
-		t.Fatalf("tmdb key = %s, want ok", byName["tmdb key"])
+	if r := byName["tmdb key"]; r.Status != launcher.OK || !strings.Contains(r.Detail, "accepted") {
+		t.Fatalf("tmdb key = %+v, want ok and accepted", r)
 	}
-	if byName["prowlarr key"] != launcher.Warn {
-		t.Fatalf("prowlarr key = %s, want warn", byName["prowlarr key"])
+	if byName["prowlarr key"].Status != launcher.Warn {
+		t.Fatalf("prowlarr key = %s, want warn", byName["prowlarr key"].Status)
+	}
+	if r := byName["subdl key"]; r.Status != launcher.Warn || !strings.Contains(r.Detail, "rejected") {
+		t.Fatalf("subdl key = %+v, want warn and rejected", r)
 	}
 }
 

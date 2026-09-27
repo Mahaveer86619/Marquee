@@ -70,17 +70,31 @@ func CheckProviders(ctx context.Context, coreURL string) []Result {
 	}
 	defer resp.Body.Close()
 	var body struct {
-		Providers map[string]bool `json:"providers"`
+		Providers map[string]bool   `json:"providers"`
+		Checks    map[string]string `json:"checks"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return []Result{{"api keys", Warn, "unexpected status response"}}
 	}
 	var results []Result
 	for _, name := range []string{"tmdb", "prowlarr", "opensubtitles", "subdl"} {
-		if body.Providers[name] {
-			results = append(results, Result{name + " key", OK, "set"})
-		} else {
+		if !body.Providers[name] {
 			results = append(results, Result{name + " key", Warn, "not set: " + providerHints[name]})
+			continue
+		}
+		format := ""
+		if f := body.Checks[name+"_format"]; f != "" {
+			format = " (" + strings.ReplaceAll(f, "_", " ") + ")"
+		}
+		switch body.Checks[name] {
+		case "valid":
+			results = append(results, Result{name + " key", OK, "set" + format + " and accepted by the provider"})
+		case "invalid":
+			results = append(results, Result{name + " key", Warn, "set" + format + ", but the provider rejected it; check the value in deploy/.env"})
+		case "unreachable":
+			results = append(results, Result{name + " key", Warn, "set, but the provider could not be reached to verify it"})
+		default:
+			results = append(results, Result{name + " key", OK, "set"})
 		}
 	}
 	return results

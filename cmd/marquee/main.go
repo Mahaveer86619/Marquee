@@ -10,19 +10,25 @@ import (
 	"os"
 	"os/signal"
 
+	tea "charm.land/bubbletea/v2"
+
 	"marquee/internal/config"
 	"marquee/internal/launcher"
+	"marquee/internal/tui"
 	"marquee/internal/version"
 )
 
-const usage = `Usage: marquee [flags] <command> [command flags]
+const usage = `Usage: marquee [flags] [command] [command flags]
+
+Run without a command to open the terminal interface.
 
 Commands:
+  tui       Open the terminal interface (the default)
   setup     First-time setup: check Docker, prepare the data folder, build, start and verify
   up        Build (if needed) and start the stack in the background
   down      Stop the stack (volumes are kept)
   status    Show the state of each service
-  logs      Follow service logs
+  logs      Follow service logs; optionally name services: marquee logs core
   doctor    Check Docker, the core service, API keys and host tools
   config    Show the data folder and settings (config.json)
   version   Print the version
@@ -41,16 +47,23 @@ func main() {
 	}
 	flag.Parse()
 
-	if flag.NArg() < 1 {
-		flag.Usage()
-		os.Exit(2)
+	cmd, args := "tui", []string(nil)
+	// logs accepts service names, e.g. `marquee logs core`.
+	if flag.NArg() > 0 {
+		cmd, args = flag.Arg(0), flag.Args()[1:]
+	}
+	if cmd == "tui" {
+		if _, err := tea.NewProgram(tui.New(tui.NewClient(*coreURL))).Run(); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	cmd, args := flag.Arg(0), flag.Args()[1:]
-	if cmd != "setup" && len(args) > 0 {
+	if cmd != "setup" && cmd != "logs" && len(args) > 0 {
 		fmt.Fprintf(os.Stderr, "%s takes no arguments\n", cmd)
 		os.Exit(2)
 	}
@@ -72,7 +85,7 @@ func main() {
 			Out:          os.Stdout,
 		})
 	case "up", "down", "status", "logs":
-		err = compose(ctx, *composeFile, cmd)
+		err = compose(ctx, *composeFile, cmd, args)
 	case "doctor":
 		results := launcher.Doctor(ctx, *coreURL, *composeFile)
 		launcher.Print(os.Stdout, results)
@@ -94,7 +107,9 @@ func main() {
 	}
 }
 
-func compose(ctx context.Context, composeFile, cmd string) error {
+// compose runs a stack command. For logs, extra arguments name the services
+// to follow (all services when none are given).
+func compose(ctx context.Context, composeFile, cmd string, services []string) error {
 	home, err := config.HomeDir()
 	if err != nil {
 		return err
@@ -107,8 +122,11 @@ func compose(ctx context.Context, composeFile, cmd string) error {
 		"up":     {"up", "-d", "--build", "--wait"},
 		"down":   {"down"},
 		"status": {"ps"},
-		"logs":   {"logs", "-f", "--tail", "100"},
+		"logs":   {"logs", "-f", "--tail", "100", "--timestamps"},
 	}[cmd]
+	if cmd == "logs" {
+		args = append(args, services...)
+	}
 	return launcher.Compose(ctx, composeFile, launcher.ComposeEnv(home, cfg), args...)
 }
 
