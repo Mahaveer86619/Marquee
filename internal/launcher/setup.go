@@ -1,35 +1,32 @@
 package launcher
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"marquee/internal/config"
 )
 
 // SetupOptions configures a first-time or repeated setup run.
 type SetupOptions struct {
 	ComposeFile  string
 	CoreURL      string
-	MediaDir     string // optional; persisted to the compose .env file
-	WithIndexers bool   // also run Prowlarr (compose profile "indexers"); persisted
+	LibraryDir   string // optional; overrides and saves the library folder
+	WithIndexers bool   // enable Prowlarr (compose profile "indexers"); saved
 	NoCache      bool   // rebuild images without the build cache
 	Out          io.Writer
 }
 
-// Setup prepares the environment, builds the images, starts the stack and
-// verifies that every service is healthy. It is safe to run repeatedly.
+// Setup prepares the data folder and settings, builds the images, starts the
+// stack and verifies it. It is safe to run repeatedly. It never writes the
+// secrets file (deploy/.env).
 func Setup(ctx context.Context, opts SetupOptions) error {
 	out := opts.Out
-	total := 4
-	if opts.MediaDir != "" || opts.WithIndexers {
-		total = 5
-	}
-	envFile := filepath.Join(filepath.Dir(opts.ComposeFile), ".env")
+	const total = 5
 	n := 0
 	step := func(msg string) {
 		n++
@@ -45,86 +42,83 @@ func Setup(ctx context.Context, opts SetupOptions) error {
 		return err
 	}
 
-	if opts.MediaDir != "" || opts.WithIndexers {
-		step("Saving configuration")
+	step("Preparing the data folder")
+	home, cfg, err := PrepareHome(opts.LibraryDir, opts.WithIndexers)
+	if err != nil {
+		return err
 	}
-	if opts.MediaDir != "" {
-		abs, err := filepath.Abs(opts.MediaDir)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(abs, 0o755); err != nil {
-			return fmt.Errorf("cannot create media folder: %w", err)
-		}
-		if err := SetEnvValue(envFile, "MARQUEE_MEDIA_DIR", filepath.ToSlash(abs)); err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "Media folder: %s (saved to %s)\n", abs, envFile)
-	}
-	if opts.WithIndexers {
-		// Docker Compose reads COMPOSE_PROFILES from .env, so later up/down runs include Prowlarr too.
-		if err := SetEnvValue(envFile, "COMPOSE_PROFILES", "indexers"); err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "Indexer manager (Prowlarr) enabled (saved to %s)\n", envFile)
-	}
+	fmt.Fprintf(out, "Data folder:  %s\nSettings:     %s\nLibrary:      %s\n", home, config.Path(home), cfg.LibraryDir)
+	fmt.Fprintf(out, "Secrets file: %s (%s)\n", SecretsFile(opts.ComposeFile), secretsState(opts.ComposeFile))
+	env := ComposeEnv(home, cfg)
 
 	step("Building container images")
 	build := []string{"build", "--pull"}
 	if opts.NoCache {
 		build = append(build, "--no-cache")
 	}
-	if err := Compose(ctx, opts.ComposeFile, build...); err != nil {
+	if err := Compose(ctx, opts.ComposeFile, env, build...); err != nil {
 		return fmt.Errorf("image build failed: %w", err)
 	}
 
 	step("Starting services")
-	if err := Compose(ctx, opts.ComposeFile, "up", "-d", "--wait"); err != nil {
+	if err := Compose(ctx, opts.ComposeFile, env, "up", "-d", "--wait"); err != nil {
 		return fmt.Errorf("services did not start: %w", err)
 	}
 
 	step("Verifying the installation")
-	results := Doctor(ctx, opts.CoreURL)
+	results := Doctor(ctx, opts.CoreURL, opts.ComposeFile)
 	Print(out, results)
 	if Failed(results) {
 		return errors.New("one or more checks failed; see the output above")
 	}
 
 	fmt.Fprintf(out, "\nMarquee is running. Core API: %s\n", opts.CoreURL)
-	if opts.WithIndexers {
+	if cfg.Indexers.Prowlarr.Enabled {
 		fmt.Fprintln(out, "Prowlarr: http://127.0.0.1:9696 (add your own indexers there)")
 	}
 	fmt.Fprintln(out, "Stop it with `marquee down`; start it again with `marquee up`.")
 	return nil
 }
 
-// SetEnvValue sets key=value in a dotenv file, replacing an existing entry for
-// the key or appending one. The file is created if it does not exist.
-func SetEnvValue(path, key, value string) error {
-	var lines []string
-	if f, err := os.Open(path); err == nil {
-		sc := bufio.NewScanner(f)
-		for sc.Scan() {
-			lines = append(lines, sc.Text())
-		}
-		f.Close()
-		if err := sc.Err(); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+// PrepareHome loads (or creates) the settings file, applies setup overrides,
+// creates the folders and saves the result.
+func PrepareHome(libraryDir string, withIndexers bool) (string, config.Config, error) {
+	home, err := config.HomeDir()
+	if err != nil {
+		return "", config.Config{}, err
 	}
+	cfg, _, err := config.Load(home)
+	if err != nil {
+		return "", config.Config{}, err
+	}
+	if libraryDir != "" {
+		abs, err := filepath.Abs(libraryDir)
+		if err != nil {
+			return "", config.Config{}, err
+		}
+		cfg.LibraryDir = abs
+	}
+	if withIndexers {
+		cfg.Indexers.Prowlarr.Enabled = true
+	}
+	if err := config.EnsureLayout(home, cfg); err != nil {
+		return "", config.Config{}, err
+	}
+	if err := config.Save(home, cfg); err != nil {
+		return "", config.Config{}, err
+	}
+	return home, cfg, nil
+}
 
-	entry := key + "=" + value
-	replaced := false
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
-			lines[i] = entry
-			replaced = true
-		}
+// SecretsFile is the path of the user-managed secrets file next to the compose file.
+func SecretsFile(composeFile string) string {
+	return filepath.Join(filepath.Dir(composeFile), ".env")
+}
+
+// secretsState reports only whether the secrets file exists; it never reads it.
+func secretsState(composeFile string) string {
+	if _, err := os.Stat(SecretsFile(composeFile)); err == nil {
+		return "present"
 	}
-	if !replaced {
-		lines = append(lines, entry)
-	}
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	return "not created yet; copy deploy/.env.example to deploy/.env to add API keys"
 }

@@ -38,6 +38,25 @@ func TestCheckCore(t *testing.T) {
 	}
 }
 
+func TestCheckProviders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"providers":{"tmdb":true,"prowlarr":false}}`))
+	}))
+	defer srv.Close()
+
+	byName := map[string]launcher.Status{}
+	for _, r := range launcher.CheckProviders(context.Background(), srv.URL) {
+		byName[r.Name] = r.Status
+	}
+	if byName["tmdb key"] != launcher.OK {
+		t.Fatalf("tmdb key = %s, want ok", byName["tmdb key"])
+	}
+	if byName["prowlarr key"] != launcher.Warn {
+		t.Fatalf("prowlarr key = %s, want warn", byName["prowlarr key"])
+	}
+}
+
 func TestPrint(t *testing.T) {
 	var buf bytes.Buffer
 	launcher.Print(&buf, []launcher.Result{{Name: "docker", Status: launcher.OK, Detail: "found"}})

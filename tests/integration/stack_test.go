@@ -43,6 +43,18 @@ func TestCoreHealthy(t *testing.T) {
 	}
 }
 
+func TestCoreStatusListsProviders(t *testing.T) {
+	providers, ok := getJSON(t, "/api/v1/status")["providers"].(map[string]any)
+	if !ok {
+		t.Fatal("providers missing from /api/v1/status")
+	}
+	for _, name := range []string{"tmdb", "prowlarr"} {
+		if _, ok := providers[name].(bool); !ok {
+			t.Fatalf("provider %s missing or not a boolean", name)
+		}
+	}
+}
+
 func TestCoreVersion(t *testing.T) {
 	if got := getJSON(t, "/api/v1/version")["service"]; got != "core" {
 		t.Fatalf("service = %v, want core", got)

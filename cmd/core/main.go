@@ -27,9 +27,10 @@ func main() {
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	providers := configuredProviders()
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           api.New(),
+		Handler:           api.New(api.Options{Providers: providers}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -37,7 +38,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Info("core starting", "addr", *addr, "version", version.String())
+		log.Info("core starting", "addr", *addr, "version", version.String(), "providers", providers)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server failed", "err", err)
 			os.Exit(1)
@@ -69,6 +70,17 @@ func probe(addr string) int {
 		return 1
 	}
 	return 0
+}
+
+// configuredProviders reports which provider credentials were supplied through
+// the environment (deploy/.env). Values are never logged or exposed.
+func configuredProviders() map[string]bool {
+	return map[string]bool{
+		"tmdb":          os.Getenv("MARQUEE_TMDB_TOKEN") != "",
+		"prowlarr":      os.Getenv("MARQUEE_PROWLARR_API_KEY") != "",
+		"opensubtitles": os.Getenv("MARQUEE_OPENSUBTITLES_API_KEY") != "",
+		"subdl":         os.Getenv("MARQUEE_SUBDL_API_KEY") != "",
+	}
 }
 
 func envOr(key, fallback string) string {

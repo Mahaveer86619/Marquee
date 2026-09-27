@@ -109,7 +109,7 @@ Options:
 
 | Windows | Linux and macOS | Effect |
 |---|---|---|
-| `-MediaDir D:\Media` | `--media /srv/media` | Use this folder as the media library. The choice is saved for later runs. |
+| `-MediaDir D:\Media` | `--media /srv/media` | Store completed downloads in this folder instead of the default library folder. The choice is saved for later runs. |
 | `-WithIndexers` | `--with-indexers` | Also run Prowlarr at `http://127.0.0.1:9696` for indexers you configure yourself. The choice is saved for later runs. |
 | `-NoCache` | `--no-cache` | Rebuild the container images without the build cache |
 | `-BuildInDocker` | `--build-in-docker` | Compile the host programs in a Go container even when Go is installed |
@@ -117,6 +117,20 @@ Options:
 The script starts Docker Desktop if it is installed but not running. When it finishes, the core API is available at `http://127.0.0.1:7700`. For example, `GET /healthz` and `GET /api/v1/version`.
 
 With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Media NOCACHE=1`).
+
+### Configuration
+
+Marquee keeps settings and secrets in separate places:
+
+| What | Where | Managed by |
+|---|---|---|
+| Data folder | `<user home>/marquee-data/` (override with the `MARQUEE_HOME` environment variable) | Created automatically by setup |
+| Settings | `<user home>/marquee-data/config.json`: library folder, metadata language and region, preferred audio and subtitle languages, Prowlarr on or off | Created with defaults by setup; safe to edit by hand |
+| Completed downloads | `<user home>/marquee-data/library/` by default | Marquee |
+| API keys | `deploy/.env`, created by you from [`deploy/.env.example`](deploy/.env.example) | You. The file is ignored by git and read only by the core container. |
+| Database and in-progress downloads | Docker volumes | Marquee |
+
+No API key is required to start. A TMDB read token enables film search and posters; series search works without it. The example file lists every supported key and how to obtain it. After editing `deploy/.env`, run `marquee up` to apply it. `marquee doctor` reports which keys are set without revealing their values.
 
 ### Launcher commands
 
@@ -127,7 +141,8 @@ With `make` installed, `make full-up` does the same (`make full-up MEDIA=D:/Medi
 | `marquee down` | Stop the stack. Data volumes are kept. |
 | `marquee status` | Show the state of each service |
 | `marquee logs` | Follow service logs |
-| `marquee doctor` | Check Docker, host tools and service health |
+| `marquee doctor` | Check Docker, host tools, service health and which API keys are set |
+| `marquee config` | Show the data folder and the current settings |
 | `marquee version` | Print the version |
 
 ### Development

@@ -4,9 +4,11 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,14 +31,68 @@ type Result struct {
 }
 
 // Doctor runs every environment check in order.
-func Doctor(ctx context.Context, coreURL string) []Result {
-	return []Result{
+func Doctor(ctx context.Context, coreURL, composeFile string) []Result {
+	results := []Result{
 		checkBinary("docker", "docker", true),
 		checkCommand(ctx, "docker engine", Fail, "docker", "info", "--format", "{{.ServerVersion}}"),
 		checkCommand(ctx, "docker compose", Fail, "docker", "compose", "version", "--short"),
 		checkBinary("mpv", "mpv", false),
-		CheckCore(ctx, coreURL),
+		checkSecretsFile(composeFile),
 	}
+	core := CheckCore(ctx, coreURL)
+	results = append(results, core)
+	if core.Status == OK {
+		results = append(results, CheckProviders(ctx, coreURL)...)
+	}
+	return results
+}
+
+// providerHints explains what each secret enables, shown when it is not set.
+var providerHints = map[string]string{
+	"tmdb":          "film search and posters (series search still works through TVmaze)",
+	"prowlarr":      "only needed when Prowlarr is enabled",
+	"opensubtitles": "online subtitle search (optional)",
+	"subdl":         "online subtitle search (optional)",
+}
+
+// CheckProviders asks the core which API keys it received. The core reports
+// only whether each key is set, never its value.
+func CheckProviders(ctx context.Context, coreURL string) []Result {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, coreURL+"/api/v1/status", nil)
+	if err != nil {
+		return []Result{{"api keys", Fail, err.Error()}}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return []Result{{"api keys", Warn, "could not query the core: " + err.Error()}}
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Providers map[string]bool `json:"providers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return []Result{{"api keys", Warn, "unexpected status response"}}
+	}
+	var results []Result
+	for _, name := range []string{"tmdb", "prowlarr", "opensubtitles", "subdl"} {
+		if body.Providers[name] {
+			results = append(results, Result{name + " key", OK, "set"})
+		} else {
+			results = append(results, Result{name + " key", Warn, "not set: " + providerHints[name]})
+		}
+	}
+	return results
+}
+
+// checkSecretsFile reports whether deploy/.env exists without reading it.
+func checkSecretsFile(composeFile string) Result {
+	path := SecretsFile(composeFile)
+	if _, err := os.Stat(path); err != nil {
+		return Result{"secrets file", Warn, path + " not found (copy deploy/.env.example to add API keys)"}
+	}
+	return Result{"secrets file", OK, path}
 }
 
 // Failed reports whether any result is a failure.
@@ -52,7 +108,7 @@ func Failed(results []Result) bool {
 // Print writes results as aligned text.
 func Print(w io.Writer, results []Result) {
 	for _, r := range results {
-		fmt.Fprintf(w, "[%-4s] %-15s %s\n", r.Status, r.Name, r.Detail)
+		fmt.Fprintf(w, "[%-4s] %-18s %s\n", r.Status, r.Name, r.Detail)
 	}
 }
 

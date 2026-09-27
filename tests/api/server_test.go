@@ -11,7 +11,7 @@ import (
 
 func TestHealthz(t *testing.T) {
 	rec := httptest.NewRecorder()
-	api.New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	api.New(api.Options{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -27,7 +27,7 @@ func TestHealthz(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	rec := httptest.NewRecorder()
-	api.New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/version", nil))
+	api.New(api.Options{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/version", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -39,7 +39,7 @@ func TestVersion(t *testing.T) {
 
 func TestUnknownMethodRejected(t *testing.T) {
 	rec := httptest.NewRecorder()
-	api.New().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+	api.New(api.Options{}).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)

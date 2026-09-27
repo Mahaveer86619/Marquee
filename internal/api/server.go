@@ -9,9 +9,20 @@ import (
 	"marquee/internal/version"
 )
 
+// Options configures the API.
+type Options struct {
+	// Providers reports which external providers have credentials configured.
+	// Only presence is exposed, never the credential values.
+	Providers map[string]bool
+}
+
 // New returns the core HTTP handler.
-func New() http.Handler {
+func New(opts Options) http.Handler {
 	started := time.Now()
+	providers := opts.Providers
+	if providers == nil {
+		providers = map[string]bool{}
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -27,6 +38,10 @@ func New() http.Handler {
 			"version": version.Version,
 			"commit":  version.Commit,
 		})
+	})
+
+	mux.HandleFunc("GET /api/v1/status", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"providers": providers})
 	})
 
 	return mux

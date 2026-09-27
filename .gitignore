@@ -49,3 +49,6 @@ Thumbs.db
 
 # Go build caches used by scripts/full-up when building in a container
 /.cache/
+
+# Default data folder when docker compose is run directly (the launcher uses ~/marquee-data)
+/.marquee/
