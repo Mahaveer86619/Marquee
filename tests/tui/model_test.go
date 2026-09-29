@@ -12,10 +12,35 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"marquee/internal/catalog"
+	"marquee/internal/download"
+	"marquee/internal/release"
 	"marquee/internal/tui"
 )
 
-type fakeBackend struct{ queries []string }
+type fakeBackend struct {
+	queries        []string
+	releaseQueries []tui.ReleaseQuery
+	started        []tui.DownloadRequest
+	actions        []string
+	downloads      []download.View
+}
+
+func (f *fakeBackend) StartDownload(_ context.Context, r tui.DownloadRequest) (download.Download, error) {
+	f.started = append(f.started, r)
+	return download.Download{ID: "d1", Name: "Second.Film.2010.1080p", State: download.Queued}, nil
+}
+
+func (f *fakeBackend) Downloads(context.Context) ([]download.View, error) { return f.downloads, nil }
+
+func (f *fakeBackend) DownloadAction(_ context.Context, id, action string) (download.View, error) {
+	f.actions = append(f.actions, action+" "+id)
+	for _, v := range f.downloads {
+		if v.ID == id {
+			return v, nil
+		}
+	}
+	return download.View{}, nil
+}
 
 func (f *fakeBackend) Status(context.Context) (tui.Status, error) {
 	return tui.Status{Checks: map[string]string{"tmdb": "valid"}}, nil
@@ -56,6 +81,24 @@ func (f *fakeBackend) Poster(context.Context, string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func (f *fakeBackend) Releases(_ context.Context, q tui.ReleaseQuery) (tui.ReleasesResponse, error) {
+	f.releaseQueries = append(f.releaseQueries, q)
+	var r tui.ReleasesResponse
+	r.Target = release.Target{Ref: q.Ref, Scope: q.Scope}
+	r.Sources = []release.SourceStatus{{Name: "internet_archive", Status: "ok", Count: 1}}
+	r.Preferences.AudioLanguages = []string{"hi"}
+	r.Preferences.SubtitleLanguages = []string{"en"}
+	r.Releases = []release.Release{{
+		ID: "r1", Source: "prowlarr", Indexer: "Example Indexer", Name: "Second.Film.2010.1080p.WEB-DL.x264 [Hindi + English] ESub",
+		SizeBytes: 3 << 30, Seeders: 88, Score: 120, Reasons: []string{"+40 1080p", "+30 H.264 plays in every browser"},
+		Parsed: release.Parsed{Resolution: "1080p", Codec: "avc", Languages: []string{"hi", "en"}, Subtitles: []string{"en"}},
+	}, {
+		ID: "junk", Source: "prowlarr", Name: "Second.Film.2010.HDCAM.x264", Seeders: 5, Score: -150,
+		Parsed: release.Parsed{Quality: "CAM", Trash: true},
+	}}
+	return r, nil
+}
+
 func key(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
 
 func text(s string) []tea.KeyPressMsg {
@@ -66,20 +109,30 @@ func text(s string) []tea.KeyPressMsg {
 	return out
 }
 
-// send feeds a message and runs any single returned command synchronously,
-// feeding its result back in (enough for search/title/episode commands).
+// send feeds a message, runs the returned commands synchronously (including
+// batches, which carry background work such as prefetches) and feeds their
+// results back in, a few levels deep.
 func send(t *testing.T, m tea.Model, msg tea.Msg) tea.Model {
 	t.Helper()
 	m, cmd := m.Update(msg)
-	if cmd == nil {
+	return run(m, cmd, 3)
+}
+
+func run(m tea.Model, cmd tea.Cmd, depth int) tea.Model {
+	if cmd == nil || depth == 0 {
 		return m
 	}
 	switch out := cmd().(type) {
-	case nil, tea.BatchMsg:
+	case nil:
+		return m
+	case tea.BatchMsg:
+		for _, c := range out {
+			m = run(m, c, depth)
+		}
 		return m
 	default:
-		m, _ = m.Update(out)
-		return m
+		next, more := m.Update(out)
+		return run(next, more, depth-1)
 	}
 }
 

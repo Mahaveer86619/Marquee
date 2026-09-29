@@ -16,7 +16,7 @@ import (
 // Attribution: "This product uses the TMDB API but is not endorsed or certified by TMDB."
 type TMDB struct {
 	BaseURL   string // default https://api.themoviedb.org/3
-	ImageBase string // default https://image.tmdb.org/t/p/w342
+	ImageBase string // default https://image.tmdb.org/t/p/w500
 	Language  string // e.g. "en-US"
 	token     string
 	apiKey    bool // true for the short v3 API key, false for the Read Access Token
@@ -32,7 +32,7 @@ func NewTMDB(credential, language string) *TMDB {
 	cred := strings.Trim(strings.TrimSpace(credential), `"'`)
 	return &TMDB{
 		BaseURL:   "https://api.themoviedb.org/3",
-		ImageBase: "https://image.tmdb.org/t/p/w342",
+		ImageBase: "https://image.tmdb.org/t/p/w500",
 		Language:  language,
 		token:     cred,
 		apiKey:    v3KeyPattern.MatchString(cred),

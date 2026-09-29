@@ -1,8 +1,16 @@
+# On Windows, make runs recipes with sh when Git Bash provides one, otherwise
+# with cmd.exe. Under sh, "2>NUL" would create a file named NUL.
 ifeq ($(OS),Windows_NT)
 EXE     := .exe
+ifneq ($(findstring sh,$(notdir $(SHELL))),)
+NULL    := /dev/null
+LAUNCH  := ./bin/marquee.exe
+RMBIN   := rm -rf bin
+else
 NULL    := NUL
 LAUNCH  := bin\marquee.exe
 RMBIN   := if exist bin rmdir /s /q bin
+endif
 else
 EXE     :=
 NULL    := /dev/null

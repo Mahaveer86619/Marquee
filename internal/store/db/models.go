@@ -4,6 +4,41 @@
 
 package db
 
+type Download struct {
+	ID          string
+	TitleRef    string
+	TargetKey   string
+	Scope       string
+	Season      *int64
+	Episode     *int64
+	ReleaseID   string
+	Release     string
+	Name        string
+	InfoHash    *string
+	State       string
+	Audio       string
+	Subtitles   string
+	BytesDone   int64
+	BytesTotal  int64
+	Error       *string
+	CreatedAt   int64
+	UpdatedAt   int64
+	CompletedAt *int64
+}
+
+type DownloadFile struct {
+	DownloadID  string
+	FileIndex   int64
+	Path        string
+	SizeBytes   int64
+	Kind        string
+	Language    *string
+	ItemRef     *string
+	Selected    int64
+	BytesDone   int64
+	LibraryPath *string
+}
+
 type Item struct {
 	ID            string
 	TitleID       string
@@ -16,6 +51,19 @@ type Item struct {
 	RuntimeMin    *int64
 	Ref           string
 	Rating        *float64
+}
+
+type ReleaseCandidate struct {
+	ID        string
+	TargetKey string
+	Source    string
+	Name      string
+	InfoHash  *string
+	Score     int64
+	Seeders   int64
+	SizeBytes *int64
+	Data      string
+	FetchedAt int64
 }
 
 type Season struct {

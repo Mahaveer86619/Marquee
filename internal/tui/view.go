@@ -40,6 +40,9 @@ func (m Model) View() tea.View {
 	if m.err != "" {
 		status = styleErr.Render(truncate(m.err, m.width))
 	}
+	if status == "" {
+		status = m.releaseHint()
+	}
 	content := m.header() + "\n" + status + "\n" + body + "\n" + m.footer()
 
 	v := tea.NewView(content)
@@ -54,6 +57,12 @@ func (m Model) body() string {
 		return m.viewTitle()
 	case screenSeason:
 		return m.viewSeason()
+	case screenReleases:
+		return m.viewReleases()
+	case screenOptions:
+		return m.viewOptions()
+	case screenDownloads:
+		return m.viewDownloads()
 	default:
 		return m.viewSearch()
 	}
@@ -106,17 +115,23 @@ func (m Model) footer() string {
 	var keys string
 	switch {
 	case m.screen == screenSearch && !m.listFocused:
-		keys = "type to search   enter search   down results   esc clear   ctrl+c quit"
+		keys = "type to search   down results   esc clear   ctrl+d downloads   ctrl+c quit"
 	case m.screen == screenSearch:
-		keys = "up/down move   pgup/pgdn page   enter open   / search   q quit"
+		keys = "up/down move   enter open   / search   ctrl+d downloads   q quit"
 	case m.screen == screenTitle && m.title.Kind == catalog.Series:
-		keys = "up/down season   enter episodes   pgup/pgdn scroll   esc back   q quit"
+		keys = "up/down season   enter episodes   d download season   D download series   pgup/pgdn scroll   esc back"
 	case m.screen == screenTitle:
-		keys = "up/down or pgup/pgdn scroll   esc back   q quit"
+		keys = "d download   up/down or pgup/pgdn scroll   esc back   q quit"
+	case m.screen == screenReleases:
+		keys = "up/down move   enter choose   f show/hide low quality   r refresh   ctrl+d downloads   esc back"
+	case m.screen == screenOptions:
+		keys = "up/down move   space toggle   a toggle section   enter download   esc back"
+	case m.screen == screenDownloads:
+		keys = "up/down move   p pause/resume/retry   x cancel   esc back   q quit"
 	default:
-		keys = "up/down episode   pgup/pgdn page   esc back   q quit"
+		keys = "up/down episode   d download episode   D download season   esc back   q quit"
 	}
-	return styleDim.Render(keys) + "\n" + styleDim.Width(m.width).Render(tmdbNotice)
+	return styleDim.Render(truncate(keys, m.width)) + "\n" + styleDim.Width(m.width).Render(tmdbNotice)
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +167,8 @@ func (m Model) viewSearch() string {
 
 func (m Model) resultsList(width, height int) string {
 	var b strings.Builder
-	b.WriteString(styleDim.Render(fmt.Sprintf("%d results from %s", len(m.results), m.source)) + "\n")
+	b.WriteString(styleDim.Render(fmt.Sprintf("%d results from %s", len(m.results), m.source)))
+	b.WriteString("\n")
 	rows := height - 1
 	start, end := window(m.resCursor, len(m.results), rows)
 	for i := start; i < end; i++ {
@@ -170,7 +186,8 @@ func (m Model) resultsList(width, height int) string {
 		case i == m.resCursor:
 			line = styleHeading.Render(line)
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
@@ -180,11 +197,26 @@ func (m Model) preview(width, height int) string {
 	r := m.results[m.resCursor]
 	t, full := m.details[r.Ref]
 	if !full {
-		t = catalog.Title{Ref: r.Ref, Kind: r.Kind, Name: r.Name, Year: r.Year, Overview: r.Overview,
-			Details: catalog.Details{ReleaseDate: r.ReleaseDate, Rating: r.Rating, Language: r.Language}}
+		t = catalog.Title{Ref: r.Ref, Kind: r.Kind, Name: r.Name, Year: r.Year, Overview: r.Overview}
+	}
+	// Keep what the search result knew when the details lack it.
+	if t.Details.ReleaseDate == "" {
+		t.Details.ReleaseDate = r.ReleaseDate
+	}
+	if t.Details.Rating == 0 {
+		t.Details.Rating = r.Rating
+	}
+	if t.Details.Language == "" {
+		t.Details.Language = r.Language
+	}
+	if t.Year == 0 {
+		t.Year = r.Year
+	}
+	if t.Overview == "" {
+		t.Overview = r.Overview
 	}
 
-	posterRows := min(height-4, 22)
+	posterRows := min(height-2, 28)
 	posterCols := PosterCols(posterRows)
 	factsW := width - posterCols - 2
 	if factsW < 26 || posterRows < 8 {
@@ -224,32 +256,28 @@ func (m Model) viewTitle() string {
 func (m Model) titleLines() ([]string, int) {
 	t := m.title
 	h := m.bodyHeight()
-	posterRows := min(max(h-2, 8), 30)
+	posterRows := min(max(h-1, 8), 40)
 	posterCols := PosterCols(posterRows)
 	factsW := m.width - posterCols - 3
 	if factsW < 30 {
 		posterRows, posterCols, factsW = 0, 0, m.width
 	}
 
-	facts := m.factLines(t, factsW, false)
-	top := facts
-	if posterRows > 0 {
-		top = lipgloss.JoinHorizontal(lipgloss.Top, m.posterBlock(t.Ref, posterCols, posterRows), "   ", facts)
-	}
-	lines := strings.Split(top, "\n")
-
+	// The right column holds everything but the poster: facts, overview and
+	// seasons sit beside a tall poster instead of below it.
+	right := strings.Split(m.factLines(t, factsW, false), "\n")
 	if t.Overview != "" {
-		lines = append(lines, "", styleHeading.Render("Overview"))
-		lines = append(lines, strings.Split(wrap(t.Overview, m.width), "\n")...)
+		right = append(right, "", styleHeading.Render("Overview"))
+		right = append(right, strings.Split(wrap(t.Overview, factsW), "\n")...)
 	}
 
 	seasonsStart := -1
 	if t.Kind == catalog.Series {
-		lines = append(lines, "", styleHeading.Render("Seasons"))
+		right = append(right, "", styleHeading.Render("Seasons"))
 		if len(t.Seasons) == 0 {
-			lines = append(lines, styleDim.Render("No season information."))
+			right = append(right, styleDim.Render("No season information."))
 		}
-		seasonsStart = len(lines)
+		seasonsStart = len(right)
 		for i, s := range t.Seasons {
 			name := s.Name
 			if name == "" {
@@ -257,12 +285,18 @@ func (m Model) titleLines() ([]string, int) {
 			}
 			row := fmt.Sprintf(" %-24s %s", truncate(name, 24), seasonInfo(s))
 			if i == m.seasonCursor {
-				row = styleSelected.Render(padRight(row, min(m.width, 60)))
+				row = styleSelected.Render(padRight(row, min(factsW, 60)))
 			}
-			lines = append(lines, row)
+			right = append(right, row)
 		}
 	}
-	return lines, seasonsStart
+
+	if posterRows == 0 {
+		return right, seasonsStart
+	}
+	joined := lipgloss.JoinHorizontal(lipgloss.Top,
+		m.posterBlock(t.Ref, posterCols, posterRows), "   ", strings.Join(right, "\n"))
+	return strings.Split(joined, "\n"), seasonsStart
 }
 
 // factLines renders the key facts of a title. compact limits the list for the
@@ -270,7 +304,8 @@ func (m Model) titleLines() ([]string, int) {
 func (m Model) factLines(t catalog.Title, width int, compact bool) string {
 	d := t.Details
 	var b strings.Builder
-	b.WriteString(styleTitle.Render(truncate(t.Name, width)) + "\n")
+	b.WriteString(styleTitle.Render(truncate(t.Name, width)))
+	b.WriteString("\n")
 	sub := kindLabel(t.Kind)
 	if t.Year > 0 {
 		sub += "  " + fmt.Sprint(t.Year)
@@ -278,9 +313,11 @@ func (m Model) factLines(t catalog.Title, width int, compact bool) string {
 	if t.Status != "" && t.Status != "Released" {
 		sub += "  " + t.Status
 	}
-	b.WriteString(styleDim.Render(sub) + "\n")
+	b.WriteString(styleDim.Render(sub))
+	b.WriteString("\n")
 	if d.Tagline != "" && !compact {
-		b.WriteString(styleTagline.Render(wrap(d.Tagline, width)) + "\n")
+		b.WriteString(styleTagline.Render(wrap(d.Tagline, width)))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 
@@ -288,7 +325,8 @@ func (m Model) factLines(t catalog.Title, width int, compact bool) string {
 		if value == "" {
 			return
 		}
-		b.WriteString(factLine(label, value, width) + "\n")
+		b.WriteString(factLine(label, value, width))
+		b.WriteString("\n")
 	}
 
 	if t.Kind == catalog.Series {
@@ -342,9 +380,12 @@ func factLine(label, value string, width int) string {
 	valueW := max(10, width-labelWidth)
 	wrapped := strings.Split(wrap(value, valueW), "\n")
 	var b strings.Builder
-	b.WriteString(styleLabel.Render(padRight(label, labelWidth)) + wrapped[0])
+	b.WriteString(styleLabel.Render(padRight(label, labelWidth)))
+	b.WriteString(wrapped[0])
 	for _, l := range wrapped[1:] {
-		b.WriteString("\n" + strings.Repeat(" ", labelWidth) + l)
+		b.WriteString("\n")
+		b.WriteString(strings.Repeat(" ", labelWidth))
+		b.WriteString(l)
 	}
 	return b.String()
 }
@@ -390,21 +431,27 @@ func (m Model) viewSeason() string {
 		if i == m.epCursor {
 			line = styleSelected.Render(padRight(line, lw))
 		}
-		list.WriteString(line + "\n")
+		list.WriteString(line)
+		list.WriteString("\n")
 	}
 
 	e := m.episodes[m.epCursor]
 	var detail strings.Builder
-	detail.WriteString(styleTitle.Render(truncate(fmt.Sprintf("S%02dE%02d  %s", e.Season, e.Number, e.Name), rw)) + "\n\n")
-	detail.WriteString(factLine("Aired", formatDate(e.AirDate), rw) + "\n")
+	detail.WriteString(styleTitle.Render(truncate(fmt.Sprintf("S%02dE%02d  %s", e.Season, e.Number, e.Name), rw)))
+	detail.WriteString("\n\n")
+	detail.WriteString(factLine("Aired", formatDate(e.AirDate), rw))
+	detail.WriteString("\n")
 	if e.RuntimeMin > 0 {
-		detail.WriteString(factLine("Runtime", formatRuntime(e.RuntimeMin), rw) + "\n")
+		detail.WriteString(factLine("Runtime", formatRuntime(e.RuntimeMin), rw))
+		detail.WriteString("\n")
 	}
 	if e.Rating > 0 {
-		detail.WriteString(factLine("Rating", ratingText(e.Rating, 0), rw) + "\n")
+		detail.WriteString(factLine("Rating", ratingText(e.Rating, 0), rw))
+		detail.WriteString("\n")
 	}
 	if e.Overview != "" {
-		detail.WriteString("\n" + wrap(e.Overview, rw))
+		detail.WriteString("\n")
+		detail.WriteString(wrap(e.Overview, rw))
 	}
 
 	left := fitLines(strings.TrimSuffix(list.String(), "\n"), paneH)

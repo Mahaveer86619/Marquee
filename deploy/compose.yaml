@@ -18,6 +18,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:7700:7700"
+      # Torrent peer port (config.json downloads.torrent_port, set by the
+      # launcher). Published on all interfaces so peers can connect; it
+      # carries BitTorrent traffic only, never the API.
+      - "${MARQUEE_TORRENT_PORT:-42069}:${MARQUEE_TORRENT_PORT:-42069}/tcp"
+      - "${MARQUEE_TORRENT_PORT:-42069}:${MARQUEE_TORRENT_PORT:-42069}/udp"
     # API keys, created by the user from deploy/.env.example. Optional.
     env_file:
       - path: .env
@@ -29,6 +34,7 @@ services:
       MARQUEE_CONFIG_FILE: /marquee/config.json
       MARQUEE_LIBRARY_DIR: /library
       MARQUEE_DOWNLOADS_DIR: /downloads
+      MARQUEE_TORRENT_PORT: ${MARQUEE_TORRENT_PORT:-42069}
       MARQUEE_AUDIOLAB_URL: http://audiolab:7710
       MARQUEE_RECS_URL: http://recs:7720
     volumes:

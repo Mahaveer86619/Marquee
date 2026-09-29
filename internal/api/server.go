@@ -32,6 +32,10 @@ type Options struct {
 	Providers map[string]bool
 	// Catalog serves metadata. When nil, metadata endpoints return 503.
 	Catalog Catalog
+	// Releases serves release search. When nil, release endpoints return 503.
+	Releases Releases
+	// Downloads runs the download queue. When nil, download endpoints return 503.
+	Downloads Downloads
 	// Log receives one line per request (health checks excluded). Optional.
 	Log *slog.Logger
 }
@@ -64,6 +68,9 @@ func New(opts Options) http.Handler {
 		body := map[string]any{"providers": providers}
 		if opts.Catalog != nil {
 			body["checks"] = opts.Catalog.Checks(r.Context())
+		}
+		if opts.Releases != nil {
+			body["release_sources"] = opts.Releases.Sources()
 		}
 		writeJSON(w, http.StatusOK, body)
 	})
@@ -138,6 +145,9 @@ func New(opts Options) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ref": r.PathValue("ref"), "season": season, "episodes": episodes})
 	})
+
+	releaseRoutes(mux, opts)
+	downloadRoutes(mux, opts)
 
 	if opts.Log == nil {
 		return mux

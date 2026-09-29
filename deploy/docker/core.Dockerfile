@@ -19,8 +19,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --no-create-home marquee \
- && mkdir -p /data /cache /media \
- && chown marquee:marquee /data /cache
+ && mkdir -p /data /cache /downloads /library \
+ && chown marquee:marquee /data /cache /downloads /library
 COPY --from=build /out/marquee-core /usr/local/bin/marquee-core
 USER marquee
 EXPOSE 7700

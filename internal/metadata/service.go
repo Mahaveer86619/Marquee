@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"marquee/internal/catalog"
+	"marquee/internal/httpx"
 	"marquee/internal/store"
 )
 
@@ -69,28 +69,13 @@ func (s *Service) Search(ctx context.Context, query string) (SearchOutcome, erro
 			return SearchOutcome{}, ctx.Err()
 		}
 		s.Log.Warn("tmdb search failed, falling back to tvmaze", "query", query, "err", err)
-		notice = "TMDB search failed (" + shortReason(err) + "); showing TVmaze series only"
+		notice = "TMDB search failed (" + httpx.Reason(err) + "); showing TVmaze series only"
 	}
 	results, err := s.tvmaze.Search(ctx, query)
 	if err != nil {
 		s.Log.Warn("tvmaze search failed", "query", query, "err", err)
 	}
 	return SearchOutcome{Source: s.tvmaze.Name(), Results: results, Notice: notice}, err
-}
-
-func shortReason(err error) string {
-	switch {
-	case errors.Is(err, ErrUnauthorized):
-		return "credentials rejected"
-	case errors.Is(err, ErrRateLimited):
-		return "rate limited"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "timed out"
-	case strings.Contains(err.Error(), "EOF"), strings.Contains(err.Error(), "connection"):
-		return "connection failed"
-	default:
-		return "provider error"
-	}
 }
 
 func (s *Service) provider(ref catalog.Ref) (Provider, error) {

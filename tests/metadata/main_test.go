@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"marquee/internal/metadata"
+	"marquee/internal/httpx"
 )
 
 // TestMain shortens retry backoff so retry tests run quickly.
 func TestMain(m *testing.M) {
-	metadata.RetryBaseDelay = time.Millisecond
+	httpx.RetryBaseDelay = time.Millisecond
 	os.Exit(m.Run())
 }

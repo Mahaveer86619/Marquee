@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"marquee/internal/config"
 )
@@ -19,6 +20,11 @@ func ComposeEnv(home string, cfg config.Config) []string {
 		"MARQUEE_HOME="+filepath.ToSlash(home),
 		"MARQUEE_LIBRARY_DIR="+filepath.ToSlash(cfg.LibraryDir),
 	)
+	port := cfg.Downloads.TorrentPort
+	if port <= 0 || port > 65535 {
+		port = config.DefaultTorrentPort
+	}
+	env = append(env, "MARQUEE_TORRENT_PORT="+strconv.Itoa(port))
 	if cfg.Indexers.Prowlarr.Enabled {
 		env = append(env, "COMPOSE_PROFILES=indexers")
 	}

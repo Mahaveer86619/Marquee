@@ -70,8 +70,13 @@ if ($useDockerGo) {
     Write-Host "Building executables ($version, $commit)"
 }
 
+# Build to a temporary name, then swap it in. Windows cannot overwrite a
+# running program but can rename it, so an open TUI keeps working and the next
+# launch uses the new build.
+Get-ChildItem bin -Filter '*.old' -ErrorAction SilentlyContinue | Remove-Item -ErrorAction SilentlyContinue
 foreach ($target in @(@('marquee', './cmd/marquee'), @('marquee-agent', './cmd/agent'))) {
-    $out = "bin/$($target[0]).exe"
+    $final = "bin/$($target[0]).exe"
+    $out = "bin/$($target[0]).new.exe"
     if ($useDockerGo) {
         docker run --rm -v "${root}:/src" -w /src `
             -e CGO_ENABLED=0 -e GOOS=windows -e GOARCH=$goarch `
@@ -81,6 +86,11 @@ foreach ($target in @(@('marquee', './cmd/marquee'), @('marquee-agent', './cmd/a
         go build -trimpath -ldflags $ldflags -o $out $target[1]
     }
     if ($LASTEXITCODE -ne 0) { Write-Host "Build failed: $($target[0])" -ForegroundColor Red; exit $LASTEXITCODE }
+    if (Test-Path $final) {
+        $old = "$final.$([DateTime]::Now.ToString('yyyyMMddHHmmss')).old"
+        Move-Item $final $old -Force   # works even while the program is running
+    }
+    Move-Item $out $final -Force
 }
 
 $setupArgs = @('setup')

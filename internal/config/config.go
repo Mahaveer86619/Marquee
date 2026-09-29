@@ -18,11 +18,12 @@ const CurrentVersion = 1
 
 // Config holds user settings. It is safe to edit by hand.
 type Config struct {
-	Version    int      `json:"version"`
-	LibraryDir string   `json:"library_dir"` // host folder for completed downloads
-	Indexers   Indexers `json:"indexers"`
-	Metadata   Metadata `json:"metadata"`
-	Playback   Playback `json:"playback"`
+	Version    int       `json:"version"`
+	LibraryDir string    `json:"library_dir"` // host folder for completed downloads
+	Indexers   Indexers  `json:"indexers"`
+	Metadata   Metadata  `json:"metadata"`
+	Playback   Playback  `json:"playback"`
+	Downloads  Downloads `json:"downloads"`
 }
 
 // Indexers configures user-supplied release sources.
@@ -49,6 +50,15 @@ type Playback struct {
 	SubtitleLanguages []string `json:"subtitle_languages"`
 }
 
+// Downloads configures the torrent engine and the download queue.
+type Downloads struct {
+	MaxActive   int `json:"max_active"`   // downloads that run at the same time
+	TorrentPort int `json:"torrent_port"` // peer port, published by the core container (TCP and UDP)
+}
+
+// DefaultTorrentPort is the peer port used when none is configured.
+const DefaultTorrentPort = 42069
+
 // HomeDir returns the data folder: $MARQUEE_HOME if set, otherwise
 // <user home>/marquee-data.
 func HomeDir() (string, error) {
@@ -73,6 +83,7 @@ func Default(home string) Config {
 			AudioLanguages:    []string{"eng"},
 			SubtitleLanguages: []string{"eng"},
 		},
+		Downloads: Downloads{MaxActive: 2, TorrentPort: DefaultTorrentPort},
 	}
 }
 

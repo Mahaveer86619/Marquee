@@ -6,7 +6,10 @@ import (
 	"image"
 	_ "image/jpeg" // poster formats served by TMDB and TVmaze
 	_ "image/png"
+	"math"
 	"strings"
+
+	xdraw "golang.org/x/image/draw"
 )
 
 // DecodeImage decodes a JPEG or PNG image.
@@ -21,26 +24,32 @@ func PosterCols(rows int) int {
 	return max(1, rows*2*2/3)
 }
 
-// RenderImage draws img into a cols x rows block of terminal cells using the
-// upper half block: the foreground colour is the top pixel and the background
-// the bottom one. Colours are 24-bit; each pixel is the average of the source
-// pixels it covers.
+// RenderImage draws img into a cols x rows block of terminal cells. Each cell
+// is an upper half block: the foreground colour is the top pixel and the
+// background the bottom one, so the effective resolution is cols x 2*rows.
+//
+// Quality steps: the source is first reduced to 2x the target in linear light
+// (gamma-correct box filter, so fine detail averages without darkening), then
+// resampled to the target with a Catmull-Rom filter for sharp edges.
 func RenderImage(img image.Image, cols, rows int) string {
 	if img == nil || cols <= 0 || rows <= 0 {
 		return ""
 	}
-	b := img.Bounds()
-	if b.Dx() == 0 || b.Dy() == 0 {
+	if b := img.Bounds(); b.Dx() == 0 || b.Dy() == 0 {
 		return ""
 	}
-	pxH := rows * 2
+	pw, ph := cols, rows*2
+	mid := linearBoxResize(img, pw*2, ph*2)
+	dst := image.NewRGBA(image.Rect(0, 0, pw, ph))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), mid, mid.Bounds(), xdraw.Src, nil)
+
 	var sb strings.Builder
 	sb.Grow(rows * cols * 40)
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
-			tr, tg, tb := average(img, b, x, 2*y, cols, pxH)
-			br, bg, bb := average(img, b, x, 2*y+1, cols, pxH)
-			fmt.Fprintf(&sb, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀", tr, tg, tb, br, bg, bb)
+	for y := range rows {
+		for x := range cols {
+			t := dst.RGBAAt(x, 2*y)
+			b := dst.RGBAAt(x, 2*y+1)
+			fmt.Fprintf(&sb, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀", t.R, t.G, t.B, b.R, b.G, b.B)
 		}
 		sb.WriteString("\x1b[0m")
 		if y < rows-1 {
@@ -50,24 +59,66 @@ func RenderImage(img image.Image, cols, rows int) string {
 	return sb.String()
 }
 
-// average returns the mean colour of the source area that maps to target
-// pixel (tx, ty) in a tw x th grid.
-func average(img image.Image, b image.Rectangle, tx, ty, tw, th int) (uint8, uint8, uint8) {
-	x0 := b.Min.X + tx*b.Dx()/tw
-	x1 := max(x0+1, b.Min.X+(tx+1)*b.Dx()/tw)
-	y0 := b.Min.Y + ty*b.Dy()/th
-	y1 := max(y0+1, b.Min.Y+(ty+1)*b.Dy()/th)
-	var r, g, bl, n uint64
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			cr, cg, cb, _ := img.At(x, y).RGBA()
-			r, g, bl, n = r+uint64(cr), g+uint64(cg), bl+uint64(cb), n+1
+// sRGB <-> linear lookup tables (8-bit sRGB to linear [0,1], and back).
+var (
+	toLinear [256]float64
+)
+
+func init() {
+	for i := range toLinear {
+		c := float64(i) / 255
+		if c <= 0.04045 {
+			toLinear[i] = c / 12.92
+		} else {
+			toLinear[i] = math.Pow((c+0.055)/1.055, 2.4)
 		}
 	}
-	if n == 0 {
-		return 0, 0, 0
+}
+
+func toSRGB(l float64) uint8 {
+	var c float64
+	if l <= 0.0031308 {
+		c = l * 12.92
+	} else {
+		c = 1.055*math.Pow(l, 1/2.4) - 0.055
 	}
-	return uint8(r / n >> 8), uint8(g / n >> 8), uint8(bl / n >> 8)
+	return uint8(math.Round(math.Min(1, math.Max(0, c)) * 255))
+}
+
+// linearBoxResize averages source pixels in linear light into a w x h image.
+// When the source is already smaller, it is returned unchanged.
+func linearBoxResize(img image.Image, w, h int) image.Image {
+	b := img.Bounds()
+	if b.Dx() <= w || b.Dy() <= h {
+		return img
+	}
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	for ty := range h {
+		y0 := b.Min.Y + ty*b.Dy()/h
+		y1 := max(y0+1, b.Min.Y+(ty+1)*b.Dy()/h)
+		for tx := range w {
+			x0 := b.Min.X + tx*b.Dx()/w
+			x1 := max(x0+1, b.Min.X+(tx+1)*b.Dx()/w)
+			var r, g, bl float64
+			n := 0
+			for y := y0; y < y1; y++ {
+				for x := x0; x < x1; x++ {
+					cr, cg, cb, _ := img.At(x, y).RGBA()
+					r += toLinear[cr>>8]
+					g += toLinear[cg>>8]
+					bl += toLinear[cb>>8]
+					n++
+				}
+			}
+			fn := float64(n)
+			i := out.PixOffset(tx, ty)
+			out.Pix[i+0] = toSRGB(r / fn)
+			out.Pix[i+1] = toSRGB(g / fn)
+			out.Pix[i+2] = toSRGB(bl / fn)
+			out.Pix[i+3] = 255
+		}
+	}
+	return out
 }
 
 // placeholderPoster draws an empty frame of the poster's size with a label.

@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"marquee/internal/catalog"
+	"marquee/internal/release"
 )
 
 type screen int
@@ -19,6 +20,9 @@ const (
 	screenSearch screen = iota
 	screenTitle
 	screenSeason
+	screenReleases
+	screenOptions
+	screenDownloads
 )
 
 const (
@@ -89,6 +93,13 @@ type Model struct {
 	episodes []catalog.Episode
 	epCursor int
 
+	rel         releaseState
+	relCache    map[string]*relEntry // searches by queryKey, filled source by source
+	prefetchSeq int
+
+	dl   downloadsState
+	poll time.Duration // downloads refresh interval (0 = default)
+
 	loading   string
 	err       string
 	status    *Status
@@ -107,6 +118,7 @@ func New(backend Backend) Model {
 		backend: backend, input: in, width: 100, height: 30,
 		details: map[string]catalog.Title{}, loadingD: map[string]bool{},
 		posters: map[string]image.Image{}, loadingP: map[string]bool{}, rendered: map[string]string{},
+		relCache: map[string]*relEntry{},
 	}
 }
 
@@ -274,11 +286,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err, m.season, m.episodes, m.epCursor, m.screen = "", msg.season, msg.episodes, 0, screenSeason
-		return m, nil
+		return m, m.prefetchCurrent()
+
+	case releasesMsg:
+		return m.handleReleases(msg)
+
+	case prefetchMsg:
+		return m.handlePrefetch(msg)
+
+	case queuedMsg:
+		return m.handleQueued(msg)
+
+	case downloadsMsg:
+		return m.handleDownloads(msg)
+
+	case downloadTickMsg:
+		return m.handleDownloadTick(msg)
+
+	case actionMsg:
+		return m.handleAction(msg)
 
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if msg.String() == "ctrl+d" && m.screen != screenDownloads {
+			return m.openDownloads()
 		}
 		switch m.screen {
 		case screenSearch:
@@ -287,6 +320,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateTitle(msg)
 		case screenSeason:
 			return m.updateSeason(msg)
+		case screenReleases:
+			return m.updateReleases(msg)
+		case screenOptions:
+			return m.updateOptions(msg)
+		case screenDownloads:
+			return m.updateDownloads(msg)
 		}
 	}
 
@@ -307,7 +346,13 @@ func (m *Model) openTitle(t catalog.Title) tea.Cmd {
 			break
 		}
 	}
-	return m.ensureLoaded(t.Ref, true)
+	cmds := []tea.Cmd{m.ensureLoaded(t.Ref, true)}
+	if t.Kind == catalog.Movie {
+		cmds = append(cmds, m.startSearch(ReleaseQuery{Ref: t.Ref, Scope: release.ScopeMovie}))
+	} else {
+		cmds = append(cmds, m.prefetchCurrent())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) focusList() {
@@ -404,6 +449,7 @@ func (m Model) updateTitle(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if isSeries {
 			m.seasonCursor = max(0, m.seasonCursor-1)
 			m.scroll = keepVisible(m.scroll, seasonsStart+m.seasonCursor, h, maxScroll)
+			return m, m.prefetchCurrent()
 		} else {
 			m.scroll = max(0, m.scroll-1)
 		}
@@ -411,6 +457,7 @@ func (m Model) updateTitle(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if isSeries {
 			m.seasonCursor = min(len(m.title.Seasons)-1, m.seasonCursor+1)
 			m.scroll = keepVisible(m.scroll, seasonsStart+m.seasonCursor, h, maxScroll)
+			return m, m.prefetchCurrent()
 		} else {
 			m.scroll = min(maxScroll, m.scroll+1)
 		}
@@ -427,6 +474,20 @@ func (m Model) updateTitle(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			n := m.title.Seasons[m.seasonCursor].Number
 			m.loading, m.err = fmt.Sprintf("Loading season %d...", n), ""
 			return m, m.episodesCmd(m.title.Ref, n)
+		}
+	case "d":
+		if m.title.Kind == catalog.Movie {
+			q := ReleaseQuery{Ref: m.title.Ref, Scope: release.ScopeMovie}
+			return m.openReleases(q, releaseLabel(m.title, q))
+		}
+		if isSeries {
+			q := ReleaseQuery{Ref: m.title.Ref, Scope: release.ScopeSeason, Season: m.title.Seasons[m.seasonCursor].Number}
+			return m.openReleases(q, releaseLabel(m.title, q))
+		}
+	case "D":
+		if m.title.Kind == catalog.Series {
+			q := ReleaseQuery{Ref: m.title.Ref, Scope: release.ScopeSeries}
+			return m.openReleases(q, releaseLabel(m.title, q))
 		}
 	case "esc", "backspace":
 		m.screen, m.err = screenSearch, ""
@@ -450,12 +511,23 @@ func (m Model) updateSeason(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
 		m.epCursor = max(0, m.epCursor-1)
+		return m, m.prefetchCurrent()
 	case "down", "j":
 		m.epCursor = min(len(m.episodes)-1, m.epCursor+1)
+		return m, m.prefetchCurrent()
 	case "pgup":
 		m.epCursor = max(0, m.epCursor-m.listRows())
 	case "pgdown":
 		m.epCursor = min(len(m.episodes)-1, m.epCursor+m.listRows())
+	case "d":
+		if len(m.episodes) > 0 {
+			e := m.episodes[m.epCursor]
+			q := ReleaseQuery{Ref: m.title.Ref, Scope: release.ScopeEpisode, Season: e.Season, Episode: e.Number}
+			return m.openReleases(q, releaseLabel(m.title, q))
+		}
+	case "D":
+		q := ReleaseQuery{Ref: m.title.Ref, Scope: release.ScopeSeason, Season: m.season}
+		return m.openReleases(q, releaseLabel(m.title, q))
 	case "esc", "backspace":
 		m.screen, m.err = screenTitle, ""
 	case "q":

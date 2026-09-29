@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"marquee/internal/httpx"
 )
 
 // posterHosts are the only hosts posters are downloaded from.
@@ -43,7 +45,7 @@ func (s *Service) Poster(ctx context.Context, rawRef string) ([]byte, string, er
 		}
 	}
 
-	data, ctype, err := getBytes(ctx, s.imageClient, title.PosterURL)
+	data, ctype, err := httpx.GetBytes(ctx, s.imageClient, title.PosterURL, http.Header{"Accept": {"image/*"}})
 	if err != nil {
 		return nil, "", err
 	}

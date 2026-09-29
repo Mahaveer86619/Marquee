@@ -2,7 +2,7 @@
 
 Marquee is a local-first media system with a terminal interface. It finds and downloads films and series, starts playback while the download is still in progress, keeps subtitles in sync automatically, and recommends what to watch next. Friends' installations connect directly to each other, without a central server, for synchronized co-watching and shared recommendations.
 
-> **Project status:** early development. The container stack, launcher, metadata search and the terminal search interface work today. Release search, downloads and playback follow the [roadmap](docs/roadmap.md).
+> **Project status:** early development. The container stack, launcher, metadata search, release search and downloads into the library work today from the terminal interface. Track probing and playback follow the [roadmap](docs/roadmap.md).
 
 ---
 
@@ -125,7 +125,7 @@ Marquee keeps settings and secrets in separate places:
 | What | Where | Managed by |
 |---|---|---|
 | Data folder | `<user home>/marquee-data/` (override with the `MARQUEE_HOME` environment variable) | Created automatically by setup |
-| Settings | `<user home>/marquee-data/config.json`: library folder, metadata language and region, preferred audio and subtitle languages, Prowlarr on or off | Created with defaults by setup; safe to edit by hand |
+| Settings | `<user home>/marquee-data/config.json`: library folder, metadata language and region, preferred audio and subtitle languages, Prowlarr on or off, concurrent downloads and the torrent peer port (default 42069, TCP and UDP) | Created with defaults by setup; safe to edit by hand |
 | Completed downloads | `<user home>/marquee-data/library/` by default | Marquee |
 | API keys | `deploy/.env`, created by you from [`deploy/.env.example`](deploy/.env.example) | You. The file is ignored by git and read only by the core container. |
 | Database and in-progress downloads | Docker volumes | Marquee |

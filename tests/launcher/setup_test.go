@@ -66,6 +66,18 @@ func TestComposeEnv(t *testing.T) {
 	if !slices.Contains(launcher.ComposeEnv(home, cfg), "COMPOSE_PROFILES=indexers") {
 		t.Fatal("indexers profile missing when Prowlarr is enabled")
 	}
+
+	if !slices.Contains(env, "MARQUEE_TORRENT_PORT=42069") {
+		t.Fatal("default torrent port missing")
+	}
+	cfg.Downloads.TorrentPort = 51413
+	if !slices.Contains(launcher.ComposeEnv(home, cfg), "MARQUEE_TORRENT_PORT=51413") {
+		t.Fatal("configured torrent port missing")
+	}
+	cfg.Downloads.TorrentPort = 99999
+	if !slices.Contains(launcher.ComposeEnv(home, cfg), "MARQUEE_TORRENT_PORT=42069") {
+		t.Fatal("an invalid torrent port should fall back to the default")
+	}
 }
 
 func TestSetupRequiresComposeFile(t *testing.T) {
